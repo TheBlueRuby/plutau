@@ -1,13 +1,14 @@
-# Nih-Sampler
+# Plutau
 
 ![Screenshot](./screenshot.png)
 
-A simple sampler written with [nih-plug](https://github.com/robbert-vdh/nih-plug.git).
-Mainly made for myself to create setups for programming drums
+An UTAU plugin for your DAW
+Made with [nih-plug](https://github.com/robbert-vdh/nih-plug.git).
+Based on [nih-sampler](https://github.com/matidfk/nih-sampler).
 
 Run with:
 
-`cargo xtask bundle nih-sampler --release`
+`cargo xtask bundle plutau --release`
 
 Features:
 - Automatically reload and resample all samples when sample rate changes

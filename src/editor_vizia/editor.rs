@@ -10,13 +10,13 @@ use nih_plug::prelude::*;
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::widgets::*;
 
-use crate::{NihSamplerParams, ThreadMessage};
+use crate::{PlutauParams, ThreadMessage};
 
 use super::visualizer::{Visualizer, VisualizerData};
 
 #[derive(Lens)]
 struct Data {
-    params: Arc<NihSamplerParams>,
+    params: Arc<PlutauParams>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     debug: String,
     visualizer: Arc<VisualizerData>,
@@ -72,7 +72,7 @@ pub fn default_state() -> Arc<ViziaState> {
 }
 
 pub fn create(
-    params: Arc<NihSamplerParams>,
+    params: Arc<PlutauParams>,
     editor_state: Arc<ViziaState>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     visualizer: Arc<VisualizerData>,
@@ -92,7 +92,7 @@ pub fn create(
         ResizeHandle::new(cx);
         VStack::new(cx, |cx| {
             HStack::new(cx, |cx| {
-                Label::new(cx, "Nih Sampler").id("logo");
+                Label::new(cx, "Plutau").id("logo");
                 Visualizer::new(cx, Data::visualizer).id("visualizer");
             })
             .class("top-bar");

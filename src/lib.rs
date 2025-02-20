@@ -30,8 +30,8 @@ pub enum ThreadMessage {
 }
 
 /// Main plugin struct
-pub struct NihSampler {
-    pub params: Arc<NihSamplerParams>,
+pub struct Plutau {
+    pub params: Arc<PlutauParams>,
     pub playing_samples: Vec<PlayingSample>,
     pub sample_rate: f32,
     pub loaded_samples: HashMap<PathBuf, LoadedSample>,
@@ -39,7 +39,7 @@ pub struct NihSampler {
     pub visualizer: Arc<VisualizerData>,
 }
 
-impl Default for NihSampler {
+impl Default for Plutau {
     fn default() -> Self {
         Self {
             params: Arc::new(Default::default()),
@@ -54,7 +54,7 @@ impl Default for NihSampler {
 
 /// Plugin parameters struct
 #[derive(Params)]
-pub struct NihSamplerParams {
+pub struct PlutauParams {
     #[persist = "editor-state"]
     editor_state: Arc<ViziaState>,
     #[persist = "sample-list"]
@@ -74,7 +74,7 @@ pub struct NihSamplerParams {
     pub max_volume: FloatParam,
 }
 
-impl Default for NihSamplerParams {
+impl Default for PlutauParams {
     fn default() -> Self {
         Self {
             editor_state: ViziaState::new(|| (400, 700)),
@@ -102,10 +102,10 @@ impl Default for NihSamplerParams {
     }
 }
 
-impl Plugin for NihSampler {
-    const NAME: &'static str = "Nih Sampler";
-    const VENDOR: &'static str = "matidfk";
-    const URL: &'static str = "https://youtu.be/dQw4w9WgXcQ";
+impl Plugin for Plutau {
+    const NAME: &'static str = "Plutau";
+    const VENDOR: &'static str = "avi!86";
+    const URL: &'static str = "https://avi86.bandcamp.com";
     const EMAIL: &'static str = "info@example.com";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
@@ -254,7 +254,7 @@ fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) ->
     }
 }
 
-impl NihSampler {
+impl Plutau {
     fn velocity_to_gain(&self, velocity: u8) -> f32 {
         // this is just mapping from the velocity range to volume range
         self.params.min_volume.value()
@@ -371,27 +371,27 @@ impl NihSampler {
     }
 }
 
-impl ClapPlugin for NihSampler {
-    const CLAP_ID: &'static str = "com.moist-plugins-gmbh.the-moistest-plugin-ever";
-    const CLAP_DESCRIPTION: Option<&'static str> = Some("A simple random-selection sampler");
+impl ClapPlugin for Plutau {
+    const CLAP_ID: &'static str = "com.avi86.plutau";
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("An UTAU plugin for your DAW");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[
-        ClapFeature::AudioEffect,
+        ClapFeature::Instrument,
         ClapFeature::Stereo,
         ClapFeature::Mono,
         ClapFeature::Utility,
     ];
 }
 
-impl Vst3Plugin for NihSampler {
-    const VST3_CLASS_ID: [u8; 16] = *b"NihSamplerrrrrrr";
+impl Vst3Plugin for Plutau {
+    const VST3_CLASS_ID: [u8; 16] = *b"Avi86UtauPlugin1";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
-        Vst3SubCategory::Drum,
+        Vst3SubCategory::Generator,
         Vst3SubCategory::Sampler,
         Vst3SubCategory::Instrument,
     ];
 }
 
-nih_export_clap!(NihSampler);
-nih_export_vst3!(NihSampler);
+nih_export_clap!(Plutau);
+nih_export_vst3!(Plutau);
