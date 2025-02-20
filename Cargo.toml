@@ -1,0 +1,24 @@
+[package]
+name = "nih-sampler"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+hound = "3.5.0"
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["standalone"] }
+nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+iced_baseview = { git = "https://github.com/BillyDM/iced_baseview.git" }
+rand = "0.8.5"
+rfd = "0.11.1"
+serde = "1.0.152"
+time = "0.3.35"
+rubato = { git = "https://github.com/HEnquist/rubato.git", branch = "next-0.13" }
+rtrb = "0.2.3"
+
+[workspace]
+members = ["xtask"]
