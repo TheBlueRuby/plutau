@@ -13,12 +13,12 @@ hound = "3.5.0"
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["standalone"] }
 nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 iced_baseview = { git = "https://github.com/BillyDM/iced_baseview.git" }
-rand = "0.8.5"
-rfd = "0.11.1"
-serde = "1.0.152"
+rand = "0.9.0"
+rfd = "0.15.2"
+serde = "1.0.218"
 time = "0.3.35"
 rubato = { git = "https://github.com/HEnquist/rubato.git", branch = "next-0.13" }
-rtrb = "0.2.3"
+rtrb = "0.3.2"
 
 [workspace]
 members = ["xtask"]

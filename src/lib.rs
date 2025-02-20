@@ -256,11 +256,14 @@ fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) ->
 
 impl Plutau {
     fn velocity_to_gain(&self, velocity: u8) -> f32 {
+        let min_vol = self.params.min_volume.value();
+        let max_vol = self.params.max_volume.value();
+        let min_vel = self.params.min_velocity.value() as u8;
+        let max_vel = self.params.max_velocity.value() as u8;
+        let diff_vol = max_vol - min_vol;
+        let diff_vel = (max_vel - min_vel) as f32;
         // this is just mapping from the velocity range to volume range
-        self.params.min_volume.value()
-            + (self.params.max_volume.value() - self.params.min_volume.value())
-                * (velocity - self.params.min_velocity.value() as u8) as f32
-                / (self.params.max_velocity.value() - self.params.min_velocity.value()) as f32
+        min_vol + diff_vol * (velocity - min_vel) as f32 / diff_vel
     }
 
     fn proess_messages(&mut self) {
