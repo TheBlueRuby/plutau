@@ -42,7 +42,6 @@ pub struct Plutau {
     pub visualizer: Arc<VisualizerData>,
     pub lyric: Phoneme,
     pub next_lyric: Phoneme,
-    pub singer_dir: String,
 }
 
 impl Default for Plutau {
@@ -56,7 +55,6 @@ impl Default for Plutau {
             visualizer: Arc::new(VisualizerData::new()),
             lyric: Phoneme::new(0, 0),
             next_lyric: Phoneme::new(0, 0),
-            singer_dir: String::from(""),
         }
     }
 }
@@ -68,6 +66,8 @@ pub struct PlutauParams {
     editor_state: Arc<ViziaState>,
     #[persist = "sample-list"]
     sample_list: Mutex<Vec<PathBuf>>,
+    #[persist = "singer-dir"]
+    pub singer_dir: Mutex<String>,
 
     #[id = "note"]
     pub note: IntParam,
@@ -81,6 +81,7 @@ pub struct PlutauParams {
     pub min_volume: FloatParam,
     #[id = "max-volume"]
     pub max_volume: FloatParam,
+
 }
 
 impl Default for PlutauParams {
@@ -107,6 +108,7 @@ impl Default for PlutauParams {
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            singer_dir: Mutex::new(String::from("")),
         }
     }
 }
@@ -155,11 +157,10 @@ impl Plugin for Plutau {
         nih_log!("changed sample rate to {}", buffer_config.sample_rate);
 
         self.sample_rate = buffer_config.sample_rate;
+        let singer = Path::new(self.params.singer_dir.lock().unwrap().clone().as_str()).to_path_buf();
 
-        let sample_list = self.params.sample_list.lock().unwrap().clone();
-        for path in sample_list {
-            self.load_sample(path.clone());
-        }
+        self.remove_singer(singer.clone());
+        self.load_singer(singer.clone());
 
         return true;
     }
@@ -281,26 +282,11 @@ impl Plutau {
             while let Ok(message) = consumer.pop() {
                 match message {
                     ThreadMessage::LoadSinger(path) => {
-                        let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
-                        for path in keys {
-                            self.remove_sample(path);
-                        }
-                        for wav_file in fs::read_dir(path.clone()).unwrap() {
-                            let wav_file = wav_file.unwrap();
-                            let wav_path = wav_file.path();
-                            if wav_path.extension().unwrap_or_default() == "wav" {
-                                self.load_sample(wav_path);
-                            }
-                        }
-                        self.singer_dir = path.clone().to_str().unwrap().to_string();
-                        nih_log!("loaded singer from {}", path.to_str().unwrap());
+                        self.remove_singer(path.clone());
+                        self.load_singer(path.clone());
                     }
-                    ThreadMessage::RemoveSinger(_path) => {
-                        let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
-                        for path in keys {
-                            self.remove_sample(path);
-                        }
-                        self.singer_dir = String::from("");
+                    ThreadMessage::RemoveSinger(path) => {
+                        self.remove_singer(path.clone());
                     }
                 }
             }
@@ -319,14 +305,16 @@ impl Plutau {
                 }
                 match event {
                     NoteEvent::NoteOn { note, velocity, .. }
-                        if (velocity * 127.0) as u8
-                                >= self.params.min_velocity.value() as u8
+                        if (velocity * 127.0) as u8 >= self.params.min_velocity.value() as u8
                             && (velocity * 127.0) as u8
                                 <= self.params.max_velocity.value() as u8 =>
                     {
                         self.lyric = self.next_lyric;
                         nih_log!("playing note: {}", note);
-                        let phoneme = self.singer_dir.clone() + std::path::MAIN_SEPARATOR_STR + self.lyric.get_chars().as_str() + ".wav";
+                        let phoneme = self.params.singer_dir.lock().unwrap().clone()
+                            + std::path::MAIN_SEPARATOR_STR
+                            + self.lyric.get_chars().as_str()
+                            + ".wav";
                         nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
                         if let Some((path, _sample_data)) = self
@@ -389,6 +377,23 @@ impl Plutau {
                 samples = resample(samples, sample_rate, self.sample_rate);
             }
 
+            // Amplify to audible levels (-6.6dB)
+            for channel in samples.0.iter_mut() {
+                for sample in channel.iter_mut() {
+                    *sample *= 128.0
+                }
+            }
+
+            // If sample is in mono, duplicate the channel
+            if samples.0.len() == 1 {
+                samples.0.push(samples.0[0].clone());
+            } else {
+                let sample_length = samples.0[0].len();
+                if samples.0[1] == vec![0.0f32; sample_length] {
+                    samples.0[1] = samples.0[0].clone();
+                }
+            }
+
             self.loaded_samples.insert(path.clone(), samples);
         }
 
@@ -403,6 +408,31 @@ impl Plutau {
             sample_list.remove(index);
         }
         self.loaded_samples.remove(&path);
+    }
+
+
+    fn load_singer(&mut self, path: PathBuf) {
+        self.remove_singer(path.clone());
+        if fs::read_dir(path.clone()).is_err() {
+            nih_log!("failed to load singer from {}", path.to_str().unwrap());
+            return;
+        }
+        for wav_file in fs::read_dir(path.clone()).unwrap() {
+            let wav_file = wav_file.unwrap();
+            let wav_path = wav_file.path();
+            if wav_path.extension().unwrap_or_default() == "wav" {
+                self.load_sample(wav_path);
+            }
+        }
+        *self.params.singer_dir.lock().unwrap() = path.clone().to_str().unwrap().to_string();
+        nih_log!("loaded singer from {}", path.to_str().unwrap());
+    }
+    fn remove_singer(&mut self, _path: PathBuf)  {
+        let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
+        for path in keys {
+            self.remove_sample(path);
+        }
+        *self.params.singer_dir.lock().unwrap() = String::from("");
     }
 }
 

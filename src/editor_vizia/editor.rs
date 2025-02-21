@@ -100,6 +100,9 @@ pub fn create(
                 Label::new(cx, "Settings").class("heading");
                 GenericUi::new(cx, Data::params).id("settings-container");
 
+                // Label::new(cx, "Singer").class("heading");
+                // GenericUi::new(cx, Data::params.singer_dir).id("singer-container");
+
                 HStack::new(cx, |cx| {
                     Label::new(cx, "Samples").class("heading");
 
