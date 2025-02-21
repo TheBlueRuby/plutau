@@ -1,7 +1,6 @@
 use crate::playing_sample::PlayingSample;
 use editor_vizia::visualizer::VisualizerData;
 use nih_plug_vizia::ViziaState;
-use pitch_shift::PitchShifter;
 use rubato::Resampler;
 use std::{
     cell::RefCell,
@@ -11,8 +10,9 @@ use std::{
     sync::{Arc, Mutex},
     vec,
 };
+use tdpsola::{AlternatingHann, Speed, TdpsolaAnalysis, TdpsolaSynthesis};
 
-use nih_plug::prelude::*;
+use nih_plug::{prelude::*, util::midi_note_to_freq};
 mod editor_vizia;
 mod playing_sample;
 
@@ -29,7 +29,7 @@ use frq_parse::*;
 /// ]
 pub struct LoadedSample {
     samples: Vec<Vec<f32>>,
-    midi_note: u8,
+    frequency: f32,
 }
 
 #[derive(Clone)]
@@ -47,8 +47,8 @@ pub struct Plutau {
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
     pub lyric: Phoneme,
-    pub sample_note: u8,
-    pub midi_note: u8,
+    pub sample_frequency: f32,
+    pub midi_frequency: f32,
 }
 
 impl Default for Plutau {
@@ -61,8 +61,8 @@ impl Default for Plutau {
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
             lyric: Phoneme::new(0, 0),
-            sample_note: 60,
-            midi_note: 60,
+            sample_frequency: 440.0,
+            midi_frequency: 440.0,
         }
     }
 }
@@ -84,11 +84,6 @@ pub struct PlutauParams {
     pub vowel: IntParam,
     #[id = "consonant"]
     pub consonant: IntParam,
-
-    #[id = "oversampling"]
-    pub oversampling: IntParam,
-    #[id = "window-duration"]
-    pub window_duration: IntParam,
 }
 
 impl Default for PlutauParams {
@@ -107,13 +102,6 @@ impl Default for PlutauParams {
             singer_dir: Mutex::new(String::from("")),
             vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
             consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
-            oversampling: IntParam::new("Oversampling", 16, IntRange::Linear { min: 1, max: 32 }),
-            window_duration: IntParam::new(
-                "Window Duration",
-                50,
-                IntRange::Linear { min: 10, max: 100 },
-            )
-            .with_unit(" ms"),
         }
     }
 }
@@ -185,37 +173,59 @@ impl Plugin for Plutau {
         for playing_sample in &mut self.playing_samples {
             // attempt to get sample data
             if let Some(loaded_sample) = self.loaded_samples.get(&playing_sample.handle) {
-                let mut shifter =
-                    PitchShifter::new(self.params.window_duration.value() as usize, self.sample_rate as usize);
-                let shift = self.midi_note as f32 - self.sample_note as f32;
-                nih_log!(
-                    "sample: {}, midi: {}, shift: {}",
-                    self.sample_note,
-                    self.midi_note,
-                    shift
-                );
+                let source_frequency = self.sample_frequency as f32;
+                let target_frequency = self.midi_frequency as f32;
+                //--------------------------------
 
-                let in_b_l: Vec<f32> = loaded_sample.samples[0].clone();
-                let mut out_b_l: Vec<f32> = vec![0.0; in_b_l.len()];
-                shifter.shift_pitch(
-                    self.params.oversampling.value() as usize,
-                    shift as f32,
-                    &in_b_l,
-                    &mut out_b_l,
-                );
+                let sampling_frequency = self.sample_rate as f32;
 
-                let in_b_r: Vec<f32> = loaded_sample.samples[1].clone();
-                let mut out_b_r: Vec<f32> = vec![0.0; in_b_r.len()];
-                shifter.shift_pitch(
-                    self.params.oversampling.value() as usize,
-                    shift as f32,
-                    &in_b_r,
-                    &mut out_b_r,
-                );
+                let source_wavelength = sampling_frequency as f32 / source_frequency as f32;
+                let target_wavelength = sampling_frequency as f32 / target_frequency as f32;
+                let speed = Speed::from_f32(1.0);
+
+                // Left
+                let mut l_alternating_hann = AlternatingHann::new(source_wavelength);
+                let mut l_analysis = TdpsolaAnalysis::new(&l_alternating_hann);
+
+                let l_padding_length = source_wavelength as usize + 1;
+                for _ in 0..l_padding_length {
+                    l_analysis.push_sample(0.0, &mut l_alternating_hann);
+                }
+                let l_in: Vec<f32> = loaded_sample.samples[0].clone();
+
+                for sample in l_in.iter() {
+                    l_analysis.push_sample(*sample, &mut l_alternating_hann);
+                }
+
+                let mut l_synthesis = TdpsolaSynthesis::new(speed, target_wavelength);
+                let mut l_out: Vec<f32> = Vec::new();
+                for output_sample in l_synthesis.iter(&l_analysis).skip(l_padding_length) {
+                    l_out.push(output_sample);
+                }
+
+                // Right
+                let mut r_alternating_hann = AlternatingHann::new(source_wavelength);
+                let mut r_analysis = TdpsolaAnalysis::new(&r_alternating_hann);
+
+                let r_padding_length = source_wavelength as usize + 1;
+                for _ in 0..r_padding_length {
+                    r_analysis.push_sample(0.0, &mut r_alternating_hann);
+                }
+                let r_in: Vec<f32> = loaded_sample.samples[1].clone();
+
+                for sample in r_in.iter() {
+                    r_analysis.push_sample(*sample, &mut r_alternating_hann);
+                }
+
+                let mut r_synthesis = TdpsolaSynthesis::new(speed, target_wavelength);
+                let mut r_out: Vec<f32> = Vec::new();
+                for output_sample in r_synthesis.iter(&r_analysis).skip(r_padding_length) {
+                    r_out.push(output_sample);
+                }
 
                 let shifted_sample: LoadedSample = LoadedSample {
-                    samples: vec![out_b_l.clone(), out_b_r.clone()],
-                    midi_note: loaded_sample.midi_note,
+                    samples: vec![l_out.clone(), r_out.clone()],
+                    frequency: target_frequency,
                 };
                 // channel_samples is [a, b, c]
                 for channel_samples in buffer.iter_samples() {
@@ -273,7 +283,7 @@ fn uninterleave(samples: Vec<f32>, channels: usize) -> LoadedSample {
 
     LoadedSample {
         samples: new_samples,
-        midi_note: 60,
+        frequency: 440.0,
     }
 }
 
@@ -301,12 +311,12 @@ fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) ->
 
             LoadedSample {
                 samples: waves_out,
-                midi_note: samples.midi_note,
+                frequency: samples.frequency,
             }
         }
         Err(_) => LoadedSample {
             samples: vec![],
-            midi_note: 60,
+            frequency: 440.0,
         },
     }
 }
@@ -352,7 +362,7 @@ impl Plutau {
                             self.params.consonant.value() as u8,
                         );
                         nih_log!("playing note: {}", note);
-                        self.midi_note = note;
+                        self.midi_frequency = midi_note_to_freq(note);
                         let phoneme = self.params.singer_dir.lock().unwrap().clone()
                             + std::path::MAIN_SEPARATOR_STR
                             + self.lyric.get_chars().as_str()
@@ -363,7 +373,7 @@ impl Plutau {
                             .loaded_samples
                             .get_key_value(Path::new(phoneme.as_str()))
                         {
-                            self.sample_note = sample_data.midi_note;
+                            self.sample_frequency = sample_data.frequency;
 
                             let mut playing_sample = PlayingSample::new(
                                 path.clone(),
@@ -433,8 +443,7 @@ impl Plutau {
                 )
                 .to_path_buf(),
             );
-            let sample_note = get_midi_note_from_frq(sample_frq);
-            samples.midi_note = sample_note;
+            samples.frequency = sample_frq;
 
             self.loaded_samples.insert(path.clone(), samples);
         }

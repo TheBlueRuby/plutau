@@ -5,6 +5,7 @@
 An UTAU plugin for your DAW
 Made with [nih-plug](https://github.com/robbert-vdh/nih-plug.git).
 Based on [nih-sampler](https://github.com/matidfk/nih-sampler).
+Uses [TD-PSOLA](https://codeberg.org/PieterPenninckx/tdpsola).
 
 Run with:
 
@@ -12,14 +13,11 @@ Run with:
 
 Features:
 - Automatically reload and resample all samples when sample rate changes
-- Min and max volume, the volume is calculated by mapping velocity
-- Deterministic sample picker
 
 ## Usage
 
 Input melody with a MIDI sequence
-Use MIDI CC 16 to select vowels (0-4 => a, i, u, e, o)
-Use MIDI CC 17 to select consonants (0-14 => none, k, s, t, n, h, m, y, r, w, g, z, d, b, p)
+Vowels and Consonants are automatable
 
 
 ## TODO:

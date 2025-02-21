@@ -2327,6 +2327,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "music-math"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a7475e279ecd71671f462a096fcc33ab1840d0fb7e2e984df8b096831960050"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "ndk"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2569,9 +2578,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.17"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
 ]
@@ -3098,6 +3107,7 @@ version = "0.1.0"
 dependencies = [
  "hound",
  "iced_baseview",
+ "music-math",
  "nih_plug",
  "nih_plug_vizia",
  "pitch_shift",
@@ -3105,6 +3115,7 @@ dependencies = [
  "rtrb 0.3.2",
  "rubato",
  "serde",
+ "tdpsola",
  "time",
 ]
 
@@ -3866,6 +3877,12 @@ checksum = "e801cf239ecd6ccd71f03d270d67dd53d13e90aab208bf4b8fe4ad957ea949b0"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "tdpsola"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2b8b9dbf876dfb5808e3693c033c4da41a07f6306a599a5db267629a8df1388"
 
 [[package]]
 name = "tempfile"
