@@ -24,7 +24,10 @@ use phoneme::Phoneme;
 ///     [a, a, a, ...],
 ///     [b, b, b, ...],
 /// ]
-pub struct LoadedSample(Vec<Vec<f32>>);
+pub struct LoadedSample {
+    samples: Vec<Vec<f32>>,
+    midi_note: u8,
+}
 
 #[derive(Clone)]
 pub enum ThreadMessage {
@@ -74,7 +77,6 @@ pub struct PlutauParams {
     pub vowel: IntParam,
     #[id = "consonant"]
     pub consonant: IntParam,
-
 }
 
 impl Default for PlutauParams {
@@ -141,7 +143,8 @@ impl Plugin for Plutau {
         nih_log!("changed sample rate to {}", buffer_config.sample_rate);
 
         self.sample_rate = buffer_config.sample_rate;
-        let singer = Path::new(self.params.singer_dir.lock().unwrap().clone().as_str()).to_path_buf();
+        let singer =
+            Path::new(self.params.singer_dir.lock().unwrap().clone().as_str()).to_path_buf();
 
         self.remove_singer(singer.clone());
         self.load_singer(singer.clone());
@@ -169,7 +172,7 @@ impl Plugin for Plutau {
                     if playing_sample.position >= 0 {
                         for (channel_index, sample) in channel_samples.into_iter().enumerate() {
                             let s = loaded_sample
-                                .0
+                                .samples
                                 .get(channel_index)
                                 .unwrap_or(&vec![])
                                 .get(playing_sample.position as usize)
@@ -190,7 +193,7 @@ impl Plugin for Plutau {
         // remove samples that are done playing
         self.playing_samples
             .retain(|e| match self.loaded_samples.get(&e.handle) {
-                Some(sample) => e.position < sample.0[0].len() as isize,
+                Some(sample) => e.position < sample.samples[0].len() as isize,
                 None => false,
             });
 
@@ -217,21 +220,24 @@ fn uninterleave(samples: Vec<f32>, channels: usize) -> LoadedSample {
         }
     }
 
-    LoadedSample(new_samples)
+    LoadedSample {
+        samples: new_samples,
+        midi_note: 60,
+    }
 }
 
 fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) -> LoadedSample {
-    let samples = samples.0;
+    let sample_data = samples.samples;
     let mut resampler = rubato::FftFixedIn::<f32>::new(
         sample_rate_in as usize,
         sample_rate_out as usize,
-        samples[0].len(),
+        sample_data[0].len(),
         8,
-        samples.len(),
+        sample_data.len(),
     )
     .unwrap();
 
-    match resampler.process(&samples, None) {
+    match resampler.process(&sample_data, None) {
         Ok(mut waves_out) => {
             // get the duration of leading silence introduced by FFT
             // https://github.com/HEnquist/rubato/blob/52cdc3eb8e2716f40bc9b444839bca067c310592/src/synchro.rs#L654
@@ -242,9 +248,12 @@ fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) ->
                 channel.shrink_to_fit();
             }
 
-            LoadedSample(waves_out)
+            LoadedSample {
+                samples: waves_out,
+                midi_note: samples.midi_note,
+            }
         }
-        Err(_) => LoadedSample(vec![]),
+        Err(_) => LoadedSample{samples: vec![], midi_note: 60},
     }
 }
 
@@ -283,9 +292,11 @@ impl Plutau {
                     break;
                 }
                 match event {
-                    NoteEvent::NoteOn { note, velocity, .. } =>
-                    {
-                        self.lyric = Phoneme::new(self.params.vowel.value() as u8, self.params.consonant.value() as u8);
+                    NoteEvent::NoteOn { note, velocity, .. } => {
+                        self.lyric = Phoneme::new(
+                            self.params.vowel.value() as u8,
+                            self.params.consonant.value() as u8,
+                        );
                         nih_log!("playing note: {}", note);
                         let phoneme = self.params.singer_dir.lock().unwrap().clone()
                             + std::path::MAIN_SEPARATOR_STR
@@ -343,19 +354,19 @@ impl Plutau {
             }
 
             // Amplify to audible levels (-6.6dB)
-            for channel in samples.0.iter_mut() {
+            for channel in samples.samples.iter_mut() {
                 for sample in channel.iter_mut() {
                     *sample *= 128.0
                 }
             }
 
             // If sample is in mono, duplicate the channel
-            if samples.0.len() == 1 {
-                samples.0.push(samples.0[0].clone());
+            if samples.samples.len() == 1 {
+                samples.samples.push(samples.samples[0].clone());
             } else {
-                let sample_length = samples.0[0].len();
-                if samples.0[1] == vec![0.0f32; sample_length] {
-                    samples.0[1] = samples.0[0].clone();
+                let sample_length = samples.samples[0].len();
+                if samples.samples[1] == vec![0.0f32; sample_length] {
+                    samples.samples[1] = samples.samples[0].clone();
                 }
             }
 
@@ -375,7 +386,6 @@ impl Plutau {
         self.loaded_samples.remove(&path);
     }
 
-
     fn load_singer(&mut self, path: PathBuf) {
         self.remove_singer(path.clone());
         if fs::read_dir(path.clone()).is_err() {
@@ -392,7 +402,7 @@ impl Plutau {
         *self.params.singer_dir.lock().unwrap() = path.clone().to_str().unwrap().to_string();
         nih_log!("loaded singer from {}", path.to_str().unwrap());
     }
-    fn remove_singer(&mut self, _path: PathBuf)  {
+    fn remove_singer(&mut self, _path: PathBuf) {
         let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
         for path in keys {
             self.remove_sample(path);
