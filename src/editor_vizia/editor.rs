@@ -25,8 +25,8 @@ struct Data {
 #[derive(Clone)]
 enum AppEvent {
     OpenFilePicker,
-    LoadSample(PathBuf),
-    RemoveSample(PathBuf),
+    LoadSinger(PathBuf),
+    RemoveSinger(PathBuf),
 }
 
 impl Model for Data {
@@ -34,31 +34,29 @@ impl Model for Data {
         event.map(|app_event, _| match app_event {
             AppEvent::OpenFilePicker => {
                 cx.spawn(|cx_proxy| {
-                    if let Some(paths) = rfd::FileDialog::new().pick_files() {
-                        for path in paths {
-                            cx_proxy.emit(AppEvent::LoadSample(path));
-                        }
+                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                        cx_proxy.emit(AppEvent::LoadSinger(path));
                     }
                 });
             }
-            AppEvent::LoadSample(path) => {
+            AppEvent::LoadSinger(path) => {
                 self.debug = format!("loading: {path:?}");
                 if let Err(e) = self
                     .producer
                     .lock()
                     .unwrap()
-                    .push(ThreadMessage::LoadSample(path.clone()))
+                    .push(ThreadMessage::LoadSinger(path.clone()))
                 {
                     self.debug = e.to_string();
                 }
             }
-            AppEvent::RemoveSample(path) => {
+            AppEvent::RemoveSinger(path) => {
                 self.debug = format!("removing: {path:?}");
                 if let Err(e) = self
                     .producer
                     .lock()
                     .unwrap()
-                    .push(ThreadMessage::RemoveSample(path.clone()))
+                    .push(ThreadMessage::RemoveSinger(path.clone()))
                 {
                     self.debug = e.to_string();
                 }
@@ -131,7 +129,7 @@ pub fn create(
                                         .to_string(),
                                 );
                                 Label::new(cx, "Remove").class("remove-label").on_press(
-                                    move |cx| cx.emit(AppEvent::RemoveSample(item.get(cx).clone())),
+                                    move |cx| cx.emit(AppEvent::RemoveSinger(item.get(cx).clone())),
                                 );
                             })
                             .class("sample");

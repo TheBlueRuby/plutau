@@ -1,12 +1,12 @@
 use crate::playing_sample::PlayingSample;
 use editor_vizia::visualizer::VisualizerData;
 use nih_plug_vizia::ViziaState;
-use rand::prelude::*;
 use rubato::Resampler;
 use std::{
     cell::RefCell,
     collections::HashMap,
-    path::PathBuf,
+    fs,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -15,6 +15,9 @@ use rtrb;
 use nih_plug::prelude::*;
 mod editor_vizia;
 mod playing_sample;
+
+mod phoneme;
+use phoneme::Phoneme;
 
 /// A loaded sample stored as a vec of samples in the form:
 /// [
@@ -25,8 +28,8 @@ pub struct LoadedSample(Vec<Vec<f32>>);
 
 #[derive(Clone)]
 pub enum ThreadMessage {
-    LoadSample(PathBuf),
-    RemoveSample(PathBuf),
+    LoadSinger(PathBuf),
+    RemoveSinger(PathBuf),
 }
 
 /// Main plugin struct
@@ -37,6 +40,9 @@ pub struct Plutau {
     pub loaded_samples: HashMap<PathBuf, LoadedSample>,
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
+    pub lyric: Phoneme,
+    pub next_lyric: Phoneme,
+    pub singer_dir: String,
 }
 
 impl Default for Plutau {
@@ -48,6 +54,9 @@ impl Default for Plutau {
             consumer: RefCell::new(None),
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
+            lyric: Phoneme::new(0, 0),
+            next_lyric: Phoneme::new(0, 0),
+            singer_dir: String::from(""),
         }
     }
 }
@@ -161,7 +170,7 @@ impl Plugin for Plutau {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        self.proess_messages();
+        self.process_messages();
         self.process_midi(context, buffer);
 
         let mut amplitude = 0.0;
@@ -266,16 +275,31 @@ impl Plutau {
         min_vol + diff_vol * (velocity - min_vel) as f32 / diff_vel
     }
 
-    fn proess_messages(&mut self) {
+    fn process_messages(&mut self) {
         let mut consumer = self.consumer.take();
         if let Some(consumer) = &mut consumer {
             while let Ok(message) = consumer.pop() {
                 match message {
-                    ThreadMessage::LoadSample(path) => {
-                        self.load_sample(path);
+                    ThreadMessage::LoadSinger(path) => {
+                        let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
+                        for path in keys {
+                            self.remove_sample(path);
+                        }
+                        for wav_file in fs::read_dir(path.clone()).unwrap() {
+                            let wav_file = wav_file.unwrap();
+                            let wav_path = wav_file.path();
+                            if wav_path.extension().unwrap_or_default() == "wav" {
+                                self.load_sample(wav_path);
+                            }
+                        }
+                        self.singer_dir = path.clone().to_str().unwrap().to_string();
                     }
-                    ThreadMessage::RemoveSample(path) => {
-                        self.remove_sample(path);
+                    ThreadMessage::RemoveSinger(_path) => {
+                        let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
+                        for path in keys {
+                            self.remove_sample(path);
+                        }
+                        self.singer_dir = String::from("");
                     }
                 }
             }
@@ -286,7 +310,6 @@ impl Plutau {
 
     fn process_midi(&mut self, context: &mut impl ProcessContext<Self>, buffer: &mut Buffer) {
         let mut next_event = context.next_event();
-        let start_sample = context.transport().pos_samples().unwrap_or_default();
 
         for (sample_id, _channel_samples) in buffer.iter_samples().enumerate() {
             while let Some(event) = next_event {
@@ -301,15 +324,15 @@ impl Plutau {
                             && (velocity * 127.0) as u8
                                 <= self.params.max_velocity.value() as u8 =>
                     {
+                        self.lyric = self.next_lyric;
                         // None if no samples are loaded
                         if let Some((path, _sample_data)) =
                             // Get a random sample but based on the current sample position in
                             // project
-                            self.loaded_samples
-                                    .iter()
-                                    .choose(&mut StdRng::seed_from_u64(
-                                        start_sample.unsigned_abs() + event.timing() as u64,
-                                    ))
+                            self.loaded_samples.get_key_value(Path::new(
+                                    (self.singer_dir.clone() + self.lyric.get_chars().as_str())
+                                        .as_str(),
+                                ))
                         {
                             let mut playing_sample = PlayingSample::new(
                                 path.clone(),
@@ -322,8 +345,18 @@ impl Plutau {
                             self.playing_samples.push(playing_sample);
                         }
                     }
-                    event => context.send_event(event),
-                    // _ => {}
+                    NoteEvent::MidiCC { cc, value, .. } => match cc {
+                        16u8 => {
+                            self.next_lyric =
+                                Phoneme::new((value * 127.0) as u8, self.next_lyric.consonant)
+                        }
+                        17u8 => {
+                            self.next_lyric =
+                                Phoneme::new(self.next_lyric.vowel, (value * 127.0) as u8)
+                        }
+                        _ => (),
+                    },
+                    _ => (),
                 }
                 next_event = context.next_event();
             }

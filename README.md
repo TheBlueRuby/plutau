@@ -15,8 +15,14 @@ Features:
 - Min and max volume, the volume is calculated by mapping velocity
 - Deterministic sample picker
 
+## Usage
 
-# TODO:
+Input melody with a MIDI sequence
+Use MIDI CC 16 to select vowels (0-4 => a, i, u, e, o)
+Use MIDI CC 17 to select consonants (0-14 => none, k, s, t, n, h, m, y, r, w, g, z, d, b, p)
+
+
+## TODO:
 - Implement voicebank loading
 - Implement pitch shifting
 - find better font
