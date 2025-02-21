@@ -293,6 +293,7 @@ impl Plutau {
                             }
                         }
                         self.singer_dir = path.clone().to_str().unwrap().to_string();
+                        nih_log!("loaded singer from {}", path.to_str().unwrap());
                     }
                     ThreadMessage::RemoveSinger(_path) => {
                         let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
@@ -318,21 +319,19 @@ impl Plutau {
                 }
                 match event {
                     NoteEvent::NoteOn { note, velocity, .. }
-                        if note == self.params.note.value() as u8
-                            && (velocity * 127.0) as u8
+                        if (velocity * 127.0) as u8
                                 >= self.params.min_velocity.value() as u8
                             && (velocity * 127.0) as u8
                                 <= self.params.max_velocity.value() as u8 =>
                     {
                         self.lyric = self.next_lyric;
+                        nih_log!("playing note: {}", note);
+                        let phoneme = self.singer_dir.clone() + std::path::MAIN_SEPARATOR_STR + self.lyric.get_chars().as_str() + ".wav";
+                        nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
-                        if let Some((path, _sample_data)) =
-                            // Get a random sample but based on the current sample position in
-                            // project
-                            self.loaded_samples.get_key_value(Path::new(
-                                    (self.singer_dir.clone() + self.lyric.get_chars().as_str())
-                                        .as_str(),
-                                ))
+                        if let Some((path, _sample_data)) = self
+                            .loaded_samples
+                            .get_key_value(Path::new(phoneme.as_str()))
                         {
                             let mut playing_sample = PlayingSample::new(
                                 path.clone(),
