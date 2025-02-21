@@ -19,6 +19,9 @@ mod playing_sample;
 mod phoneme;
 use phoneme::Phoneme;
 
+mod frq_parse;
+use frq_parse::*;
+
 /// A loaded sample stored as a vec of samples in the form:
 /// [
 ///     [a, a, a, ...],
