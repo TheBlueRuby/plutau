@@ -256,7 +256,10 @@ fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) ->
                 midi_note: samples.midi_note,
             }
         }
-        Err(_) => LoadedSample{samples: vec![], midi_note: 60},
+        Err(_) => LoadedSample {
+            samples: vec![],
+            midi_note: 60,
+        },
     }
 }
 
@@ -372,6 +375,13 @@ impl Plutau {
                     samples.samples[1] = samples.samples[0].clone();
                 }
             }
+
+            let sample_frq = get_avg_frq(
+                Path::new(str::replace(path.clone().to_str().unwrap(), ".wav", "_wav.frq").as_str())
+                    .to_path_buf(),
+            );
+            let sample_note = get_midi_note_from_frq(sample_frq);
+            samples.midi_note = sample_note;
 
             self.loaded_samples.insert(path.clone(), samples);
         }
