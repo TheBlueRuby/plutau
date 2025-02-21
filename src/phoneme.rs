@@ -15,6 +15,6 @@ impl Phoneme {
     pub fn get_chars(&self) -> String {
         let vowels = ['a', 'i', 'u', 'e', 'o'];
         let consonants = ["","k", "s", "t", "n", "h", "m", "y", "r", "w", "g", "z", "d", "b", "p"];
-        format!("{}{}", vowels[self.vowel as usize], consonants[self.consonant as usize])
+        format!("{}{}", consonants[self.consonant as usize], vowels[self.vowel as usize])
     }
 }

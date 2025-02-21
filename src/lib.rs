@@ -41,7 +41,6 @@ pub struct Plutau {
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
     pub lyric: Phoneme,
-    pub next_lyric: Phoneme,
 }
 
 impl Default for Plutau {
@@ -54,7 +53,6 @@ impl Default for Plutau {
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
             lyric: Phoneme::new(0, 0),
-            next_lyric: Phoneme::new(0, 0),
         }
     }
 }
@@ -81,6 +79,11 @@ pub struct PlutauParams {
     pub min_volume: FloatParam,
     #[id = "max-volume"]
     pub max_volume: FloatParam,
+
+    #[id = "vowel"]
+    pub vowel: IntParam,
+    #[id = "consonant"]
+    pub consonant: IntParam,
 
 }
 
@@ -109,6 +112,8 @@ impl Default for PlutauParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             singer_dir: Mutex::new(String::from("")),
+            vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
+            consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
         }
     }
 }
@@ -309,7 +314,7 @@ impl Plutau {
                             && (velocity * 127.0) as u8
                                 <= self.params.max_velocity.value() as u8 =>
                     {
-                        self.lyric = self.next_lyric;
+                        self.lyric = Phoneme::new(self.params.vowel.value() as u8, self.params.consonant.value() as u8);
                         nih_log!("playing note: {}", note);
                         let phoneme = self.params.singer_dir.lock().unwrap().clone()
                             + std::path::MAIN_SEPARATOR_STR
@@ -332,17 +337,6 @@ impl Plutau {
                             self.playing_samples.push(playing_sample);
                         }
                     }
-                    NoteEvent::MidiCC { cc, value, .. } => match cc {
-                        16u8 => {
-                            self.next_lyric =
-                                Phoneme::new((value * 127.0) as u8, self.next_lyric.consonant)
-                        }
-                        17u8 => {
-                            self.next_lyric =
-                                Phoneme::new(self.next_lyric.vowel, (value * 127.0) as u8)
-                        }
-                        _ => (),
-                    },
                     _ => (),
                 }
                 next_event = context.next_event();
