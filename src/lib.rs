@@ -1,6 +1,7 @@
 use crate::playing_sample::PlayingSample;
 use editor_vizia::visualizer::VisualizerData;
 use nih_plug_vizia::ViziaState;
+use pitch_shift::PitchShifter;
 use rubato::Resampler;
 use std::{
     cell::RefCell,
@@ -8,9 +9,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    vec,
 };
-
-use rtrb;
 
 use nih_plug::prelude::*;
 mod editor_vizia;
@@ -47,6 +47,8 @@ pub struct Plutau {
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
     pub lyric: Phoneme,
+    pub sample_note: u8,
+    pub midi_note: u8,
 }
 
 impl Default for Plutau {
@@ -59,6 +61,8 @@ impl Default for Plutau {
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
             lyric: Phoneme::new(0, 0),
+            sample_note: 60,
+            midi_note: 60,
         }
     }
 }
@@ -80,6 +84,11 @@ pub struct PlutauParams {
     pub vowel: IntParam,
     #[id = "consonant"]
     pub consonant: IntParam,
+
+    #[id = "oversampling"]
+    pub oversampling: IntParam,
+    #[id = "window-duration"]
+    pub window_duration: IntParam,
 }
 
 impl Default for PlutauParams {
@@ -98,6 +107,13 @@ impl Default for PlutauParams {
             singer_dir: Mutex::new(String::from("")),
             vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
             consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
+            oversampling: IntParam::new("Oversampling", 16, IntRange::Linear { min: 1, max: 32 }),
+            window_duration: IntParam::new(
+                "Window Duration",
+                50,
+                IntRange::Linear { min: 10, max: 100 },
+            )
+            .with_unit(" ms"),
         }
     }
 }
@@ -169,12 +185,44 @@ impl Plugin for Plutau {
         for playing_sample in &mut self.playing_samples {
             // attempt to get sample data
             if let Some(loaded_sample) = self.loaded_samples.get(&playing_sample.handle) {
+                let mut shifter =
+                    PitchShifter::new(self.params.window_duration.value() as usize, self.sample_rate as usize);
+                let shift = self.midi_note as f32 - self.sample_note as f32;
+                nih_log!(
+                    "sample: {}, midi: {}, shift: {}",
+                    self.sample_note,
+                    self.midi_note,
+                    shift
+                );
+
+                let in_b_l: Vec<f32> = loaded_sample.samples[0].clone();
+                let mut out_b_l: Vec<f32> = vec![0.0; in_b_l.len()];
+                shifter.shift_pitch(
+                    self.params.oversampling.value() as usize,
+                    shift as f32,
+                    &in_b_l,
+                    &mut out_b_l,
+                );
+
+                let in_b_r: Vec<f32> = loaded_sample.samples[1].clone();
+                let mut out_b_r: Vec<f32> = vec![0.0; in_b_r.len()];
+                shifter.shift_pitch(
+                    self.params.oversampling.value() as usize,
+                    shift as f32,
+                    &in_b_r,
+                    &mut out_b_r,
+                );
+
+                let shifted_sample: LoadedSample = LoadedSample {
+                    samples: vec![out_b_l.clone(), out_b_r.clone()],
+                    midi_note: loaded_sample.midi_note,
+                };
                 // channel_samples is [a, b, c]
                 for channel_samples in buffer.iter_samples() {
                     // if sample isnt in the future
                     if playing_sample.position >= 0 {
                         for (channel_index, sample) in channel_samples.into_iter().enumerate() {
-                            let s = loaded_sample
+                            let s = shifted_sample
                                 .samples
                                 .get(channel_index)
                                 .unwrap_or(&vec![])
@@ -304,16 +352,19 @@ impl Plutau {
                             self.params.consonant.value() as u8,
                         );
                         nih_log!("playing note: {}", note);
+                        self.midi_note = note;
                         let phoneme = self.params.singer_dir.lock().unwrap().clone()
                             + std::path::MAIN_SEPARATOR_STR
                             + self.lyric.get_chars().as_str()
                             + ".wav";
                         nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
-                        if let Some((path, _sample_data)) = self
+                        if let Some((path, sample_data)) = self
                             .loaded_samples
                             .get_key_value(Path::new(phoneme.as_str()))
                         {
+                            self.sample_note = sample_data.midi_note;
+
                             let mut playing_sample = PlayingSample::new(
                                 path.clone(),
                                 self.velocity_to_gain((velocity * 127.0) as u8),
@@ -377,8 +428,10 @@ impl Plutau {
             }
 
             let sample_frq = get_avg_frq(
-                Path::new(str::replace(path.clone().to_str().unwrap(), ".wav", "_wav.frq").as_str())
-                    .to_path_buf(),
+                Path::new(
+                    str::replace(path.clone().to_str().unwrap(), ".wav", "_wav.frq").as_str(),
+                )
+                .to_path_buf(),
             );
             let sample_note = get_midi_note_from_frq(sample_frq);
             samples.midi_note = sample_note;
