@@ -67,18 +67,8 @@ pub struct PlutauParams {
     #[persist = "singer-dir"]
     pub singer_dir: Mutex<String>,
 
-    #[id = "note"]
-    pub note: IntParam,
-
-    #[id = "min-velocity"]
-    pub min_velocity: IntParam,
-    #[id = "max-velocity"]
-    pub max_velocity: IntParam,
-
-    #[id = "min-volume"]
-    pub min_volume: FloatParam,
-    #[id = "max-volume"]
-    pub max_volume: FloatParam,
+    #[id = "gain"]
+    pub gain: FloatParam,
 
     #[id = "vowel"]
     pub vowel: IntParam,
@@ -92,19 +82,8 @@ impl Default for PlutauParams {
         Self {
             editor_state: ViziaState::new(|| (400, 700)),
             sample_list: Mutex::new(vec![]),
-            note: IntParam::new("Note", 40, IntRange::Linear { min: 0, max: 127 }),
-            min_velocity: IntParam::new("Min velocity", 0, IntRange::Linear { min: 0, max: 127 }),
-            max_velocity: IntParam::new("Max velocity", 127, IntRange::Linear { min: 0, max: 127 }),
-            min_volume: FloatParam::new(
-                "Min volume",
-                util::db_to_gain(0.0),
-                FloatRange::Linear { min: 0.0, max: 2.0 },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            max_volume: FloatParam::new(
-                "Max volume",
+            gain: FloatParam::new(
+                "Gain",
                 util::db_to_gain(0.0),
                 FloatRange::Linear { min: 0.0, max: 2.0 },
             )
@@ -271,14 +250,9 @@ fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) ->
 
 impl Plutau {
     fn velocity_to_gain(&self, velocity: u8) -> f32 {
-        let min_vol = self.params.min_volume.value();
-        let max_vol = self.params.max_volume.value();
-        let min_vel = self.params.min_velocity.value() as u8;
-        let max_vel = self.params.max_velocity.value() as u8;
-        let diff_vol = max_vol - min_vol;
-        let diff_vel = (max_vel - min_vel) as f32;
+        let max_vol = self.params.gain.value();
         // this is just mapping from the velocity range to volume range
-        min_vol + diff_vol * (velocity - min_vel) as f32 / diff_vel
+        max_vol * (velocity as f32 / 127.0)
     }
 
     fn process_messages(&mut self) {
@@ -309,10 +283,7 @@ impl Plutau {
                     break;
                 }
                 match event {
-                    NoteEvent::NoteOn { note, velocity, .. }
-                        if (velocity * 127.0) as u8 >= self.params.min_velocity.value() as u8
-                            && (velocity * 127.0) as u8
-                                <= self.params.max_velocity.value() as u8 =>
+                    NoteEvent::NoteOn { note, velocity, .. } =>
                     {
                         self.lyric = Phoneme::new(self.params.vowel.value() as u8, self.params.consonant.value() as u8);
                         nih_log!("playing note: {}", note);
