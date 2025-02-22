@@ -21,8 +21,7 @@ Vowels and Consonants are automatable
 
 
 ## TODO:
-- Implement voicebank loading
-- Implement pitch shifting
+- Sample stretching
 - find better font
 - add different channel config support
 - add icons
