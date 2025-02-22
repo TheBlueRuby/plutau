@@ -2327,15 +2327,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "music-math"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7475e279ecd71671f462a096fcc33ab1840d0fb7e2e984df8b096831960050"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "ndk"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3107,7 +3098,6 @@ version = "0.1.0"
 dependencies = [
  "hound",
  "iced_baseview",
- "music-math",
  "nih_plug",
  "nih_plug_vizia",
  "pitch_shift",

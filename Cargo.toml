@@ -20,7 +20,6 @@ rubato = { git = "https://github.com/HEnquist/rubato.git", branch = "next-0.13" 
 rtrb = "0.3.2"
 pitch_shift = "1.0.0"
 tdpsola = "0.1.0"
-music-math = "0.1.1"
 
 [workspace]
 members = ["xtask"]
