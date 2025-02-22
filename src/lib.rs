@@ -1,6 +1,6 @@
 use crate::playing_sample::PlayingSample;
 use editor_vizia::visualizer::VisualizerData;
-use nih_plug_vizia::ViziaState;
+use nih_plug_vizia::{vizia::image::EncodableLayout, ViziaState};
 use rubato::Resampler;
 use std::{
     cell::RefCell,
@@ -21,6 +21,9 @@ use phoneme::Phoneme;
 
 mod frq_parse;
 use frq_parse::*;
+
+mod oto;
+use oto::*;
 
 /// A loaded sample stored as a vec of samples in the form:
 /// [
@@ -76,6 +79,8 @@ pub struct PlutauParams {
     sample_list: Mutex<Vec<PathBuf>>,
     #[persist = "singer-dir"]
     pub singer_dir: Mutex<String>,
+    #[persist = "oto"]
+    pub oto: Mutex<Oto>,
 
     #[id = "gain"]
     pub gain: FloatParam,
@@ -100,6 +105,7 @@ impl Default for PlutauParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             singer_dir: Mutex::new(String::from("")),
+            oto: Mutex::new(Oto::new(String::from(""))),
             vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
             consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
         }
@@ -365,7 +371,7 @@ impl Plutau {
                         self.midi_frequency = midi_note_to_freq(note);
                         let phoneme = self.params.singer_dir.lock().unwrap().clone()
                             + std::path::MAIN_SEPARATOR_STR
-                            + self.lyric.get_chars().as_str()
+                            + self.lyric.get_jpn_utf8().as_str()
                             + ".wav";
                         nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
@@ -463,17 +469,24 @@ impl Plutau {
 
     fn load_singer(&mut self, path: PathBuf) {
         self.remove_singer(path.clone());
-        if fs::read_dir(path.clone()).is_err() {
-            nih_log!("failed to load singer from {}", path.to_str().unwrap());
+        let oto_path =
+            path.clone().to_str().unwrap().to_owned() + std::path::MAIN_SEPARATOR_STR + "oto.ini";
+        if fs::read(oto_path.clone()).is_err() {
+            nih_log!("failed to load singer from {}", oto_path.clone());
             return;
         }
-        for wav_file in fs::read_dir(path.clone()).unwrap() {
-            let wav_file = wav_file.unwrap();
-            let wav_path = wav_file.path();
-            if wav_path.extension().unwrap_or_default() == "wav" {
-                self.load_sample(wav_path);
-            }
-        }
+
+        let mut oto = Oto::new(oto_path.clone());
+        oto.load();
+        *self.params.oto.lock().unwrap() = oto.clone();
+
+        oto.contents.iter().for_each(|entry| {
+            let path = path.clone().join(unsafe {
+                std::ffi::OsString::from_encoded_bytes_unchecked(entry.clone().file)
+            });
+            self.load_sample(Path::new(path.as_os_str()).to_path_buf());
+        });
+
         *self.params.singer_dir.lock().unwrap() = path.clone().to_str().unwrap().to_string();
         nih_log!("loaded singer from {}", path.to_str().unwrap());
     }
@@ -483,6 +496,7 @@ impl Plutau {
             self.remove_sample(path);
         }
         *self.params.singer_dir.lock().unwrap() = String::from("");
+        *self.params.oto.lock().unwrap() = Oto::new(String::from(""));
     }
 }
 
