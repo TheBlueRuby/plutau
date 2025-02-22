@@ -89,6 +89,8 @@ pub struct PlutauParams {
 
     #[id = "gain"]
     pub gain: FloatParam,
+    #[id = "instant-cutoff"]
+    pub instant_cutoff: BoolParam,
 
     #[id = "vowel"]
     pub vowel: IntParam,
@@ -109,6 +111,7 @@ impl Default for PlutauParams {
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            instant_cutoff: BoolParam::new("Instant Cutoff", true),
             singer_dir: Mutex::new(String::from("")),
             oto: Mutex::new(Oto::new(String::from(""))),
             vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
@@ -336,6 +339,13 @@ impl Plugin for Plutau {
                 Some(sample) => e.position < sample.samples[0].len() as isize,
                 None => false,
             });
+        if self.params.instant_cutoff.value() {
+            self.playing_samples
+                .retain(|e| match self.loaded_samples.get(&e.handle) {
+                    Some(_sample) => e.state != PlayingState::DONE,
+                    None => false,
+                });
+        }
 
         ProcessStatus::Normal
     }
@@ -460,7 +470,7 @@ impl Plutau {
                             .get_key_value(Path::new(phoneme.as_str()))
                         {
                             self.sample_frequency = sample_data.frequency;
-                            let offset = ((self
+                            let offset = (self
                                 .params
                                 .oto
                                 .lock()
@@ -469,31 +479,31 @@ impl Plutau {
                                 .unwrap()
                                 .offset as f32
                                 / 1000.0)
-                                * self.sample_rate) as u32;
-                            self.vowel_start = ((self
+                                * self.sample_rate;
+                            self.vowel_start = (((self
                                 .params
                                 .oto
                                 .lock()
                                 .unwrap()
                                 .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
                                 .unwrap()
-                                .consonant as f32
+                                .consonant
+                                as f32
                                 / 1000.0)
                                 * self.sample_rate)
-                                as u32
-                                + offset;
-                            self.vowel_end = ((self
-                                .params
-                                .oto
-                                .lock()
-                                .unwrap()
-                                .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
-                                .unwrap()
-                                .cutoff as f32
-                                / 1000.0)
-                                * self.sample_rate)
-                                as u32
-                                + self.vowel_start;
+                                + offset) as u32;
+                            self.vowel_end = (sample_data.samples[0].len() as f32
+                                - ((self
+                                    .params
+                                    .oto
+                                    .lock()
+                                    .unwrap()
+                                    .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                    .unwrap()
+                                    .cutoff as f32
+                                    / 1000.0)
+                                    * self.sample_rate))
+                                as u32;
 
                             nih_log!("sample length in samples: {}", sample_data.samples[0].len());
 
@@ -518,11 +528,11 @@ impl Plutau {
                         }
                     }
                     NoteEvent::NoteOff {
-                        timing,
-                        voice_id,
-                        channel,
-                        note,
-                        velocity,
+                        timing: _timing,
+                        voice_id: _voice_id,
+                        channel: _channel,
+                        note: _note,
+                        velocity: _velocity,
                     } => {
                         self.playing_samples
                             .iter_mut()
