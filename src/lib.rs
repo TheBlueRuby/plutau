@@ -53,8 +53,6 @@ pub struct Plutau {
     pub lyric: Phoneme,
     pub sample_frequency: f32,
     pub midi_frequency: f32,
-    pub vowel_start: u32,
-    pub vowel_end: u32,
 }
 
 impl Default for Plutau {
@@ -69,8 +67,6 @@ impl Default for Plutau {
             lyric: Phoneme::new(0, 0),
             sample_frequency: 440.0,
             midi_frequency: 440.0,
-            vowel_start: 0,
-            vowel_end: 0,
         }
     }
 }
@@ -126,7 +122,7 @@ impl Plugin for Plutau {
     const URL: &'static str = "https://avi86.bandcamp.com";
     const EMAIL: &'static str = "info@example.com";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-    const SAMPLE_ACCURATE_AUTOMATION: bool = true;
+    const SAMPLE_ACCURATE_AUTOMATION: bool = false;
     const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::Basic;
 
@@ -261,29 +257,29 @@ impl Plugin for Plutau {
 
                     match playing_sample.state {
                         PlayingState::ATTACK => {
-                            if playing_sample.position >= self.vowel_start as isize {
+                            if playing_sample.position >= playing_sample.vowel_start as isize {
                                 nih_log!(
                                     "a-s,a pos: {}, state: {:?}, start: {}, end: {}",
                                     playing_sample.position,
                                     playing_sample.state,
-                                    self.vowel_start,
-                                    self.vowel_end
+                                    playing_sample.vowel_start,
+                                    playing_sample.vowel_end
                                 );
                                 playing_sample.state = PlayingState::SUSTAIN;
                                 nih_log!(
                                     "a-s,s pos: {}, state: {:?}, start: {}, end: {}",
                                     playing_sample.position,
                                     playing_sample.state,
-                                    self.vowel_start,
-                                    self.vowel_end
+                                    playing_sample.vowel_start,
+                                    playing_sample.vowel_end
                                 );
                             } else {
                                 nih_log!(
                                     "a pos: {}, state: {:?}, start: {}, end: {}",
                                     playing_sample.position,
                                     playing_sample.state,
-                                    self.vowel_start,
-                                    self.vowel_end
+                                    playing_sample.vowel_start,
+                                    playing_sample.vowel_end
                                 );
                             }
                         }
@@ -292,36 +288,36 @@ impl Plugin for Plutau {
                                 "s pos: {}, state: {:?}, start: {}, end: {}",
                                 playing_sample.position,
                                 playing_sample.state,
-                                self.vowel_start,
-                                self.vowel_end
+                                playing_sample.vowel_start,
+                                playing_sample.vowel_end
                             );
-                            if playing_sample.position > self.vowel_end as isize {
+                            if playing_sample.position > playing_sample.vowel_end as isize {
                                 nih_log!(
                                     "loop! a pos: {}, state: {:?}, start: {}, end: {}",
                                     playing_sample.position,
                                     playing_sample.state,
-                                    self.vowel_start,
-                                    self.vowel_end
+                                    playing_sample.vowel_start,
+                                    playing_sample.vowel_end
                                 );
-                                playing_sample.position = self.vowel_start as isize;
+                                playing_sample.position = playing_sample.vowel_start as isize;
                                 nih_log!(
                                     "loop! b pos: {}, state: {:?}, start: {}, end: {}",
                                     playing_sample.position,
                                     playing_sample.state,
-                                    self.vowel_start,
-                                    self.vowel_end
+                                    playing_sample.vowel_start,
+                                    playing_sample.vowel_end
                                 );
                             }
                         }
                         PlayingState::RELEASE => {
-                            playing_sample.position = self.vowel_end as isize;
+                            playing_sample.position = playing_sample.vowel_end as isize;
                             playing_sample.state = PlayingState::DONE;
                             nih_log!(
                                 "r-d,d pos: {}, state: {:?}, start: {}, end: {}",
                                 playing_sample.position,
                                 playing_sample.state,
-                                self.vowel_start,
-                                self.vowel_end
+                                playing_sample.vowel_start,
+                                playing_sample.vowel_end
                             );
                         }
                         _ => {}
@@ -345,6 +341,14 @@ impl Plugin for Plutau {
                     Some(_sample) => e.state != PlayingState::DONE,
                     None => false,
                 });
+        } else {
+            for playing_sample in &mut self.playing_samples {
+                if playing_sample.state == PlayingState::DONE
+                    && playing_sample.position < playing_sample.vowel_end as isize
+                {
+                    playing_sample.position = playing_sample.vowel_end as isize;
+                }
+            }
         }
 
         ProcessStatus::Normal
@@ -454,11 +458,12 @@ impl Plutau {
                                 return;
                             }
                         }
+                        nih_log!("playing note: {}", note);
+
                         self.lyric = Phoneme::new(
                             self.params.vowel.value() as u8,
                             self.params.consonant.value() as u8,
                         );
-                        nih_log!("playing note: {}", note);
                         let phoneme = self.params.singer_dir.lock().unwrap().clone()
                             + std::path::MAIN_SEPARATOR_STR
                             + self.lyric.get_jpn_utf8().as_str()
@@ -480,19 +485,27 @@ impl Plutau {
                                 .offset as f32
                                 / 1000.0)
                                 * self.sample_rate;
-                            self.vowel_start = (((self
-                                .params
-                                .oto
-                                .lock()
-                                .unwrap()
-                                .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
-                                .unwrap()
-                                .consonant
-                                as f32
-                                / 1000.0)
-                                * self.sample_rate)
-                                + offset) as u32;
-                            self.vowel_end = (sample_data.samples[0].len() as f32
+
+                            nih_log!("sample length in samples: {}", sample_data.samples[0].len());
+
+                            let mut playing_sample = PlayingSample::new(
+                                path.clone(),
+                                self.velocity_to_gain((velocity * 127.0) as u8),
+                            );
+
+                            playing_sample.vowel_start =
+                                (((self
+                                    .params
+                                    .oto
+                                    .lock()
+                                    .unwrap()
+                                    .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                    .unwrap()
+                                    .consonant as f32
+                                    / 1000.0)
+                                    * self.sample_rate)
+                                    + offset) as u32;
+                            playing_sample.vowel_end = (sample_data.samples[0].len() as f32
                                 - ((self
                                     .params
                                     .oto
@@ -505,13 +518,6 @@ impl Plutau {
                                     * self.sample_rate))
                                 as u32;
 
-                            nih_log!("sample length in samples: {}", sample_data.samples[0].len());
-
-                            let mut playing_sample = PlayingSample::new(
-                                path.clone(),
-                                self.velocity_to_gain((velocity * 127.0) as u8),
-                            );
-
                             // start at correct position in buffer
                             playing_sample.position = -(event.timing() as isize);
 
@@ -520,8 +526,8 @@ impl Plutau {
                                 "pos: {}, state: {:?}, start: {}, end: {}",
                                 playing_sample.position,
                                 playing_sample.state,
-                                self.vowel_start,
-                                self.vowel_end
+                                playing_sample.vowel_start,
+                                playing_sample.vowel_end
                             );
 
                             self.playing_samples.push(playing_sample);
