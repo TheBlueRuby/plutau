@@ -82,6 +82,7 @@ pub struct PlutauParams {
     pub singer_dir: Mutex<String>,
     #[persist = "oto"]
     pub oto: Mutex<Oto>,
+    pub singer: Arc<Mutex<String>>,
 
     #[id = "gain"]
     pub gain: FloatParam,
@@ -109,6 +110,7 @@ impl Default for PlutauParams {
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             instant_cutoff: BoolParam::new("Instant Cutoff", true),
             singer_dir: Mutex::new(String::from("")),
+            singer: Arc::new(Mutex::new(String::from("None"))),
             oto: Mutex::new(Oto::new(String::from(""))),
             vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
             consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
@@ -145,6 +147,7 @@ impl Plugin for Plutau {
 
         editor_vizia::create(
             self.params.clone(),
+            self.params.singer.clone(),
             self.params.editor_state.clone(),
             Arc::new(Mutex::new(producer)),
             Arc::clone(&self.visualizer),
@@ -640,7 +643,9 @@ impl Plutau {
         });
 
         *self.params.singer_dir.lock().unwrap() = path.clone().to_str().unwrap().to_string();
-        nih_log!("loaded singer from {}", path.to_str().unwrap());
+        let singer_name = path.as_os_str().to_str().unwrap().to_string().split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
+        nih_log!("loaded singer {} from {}", singer_name, path.to_str().unwrap());
+        *self.params.singer.lock().unwrap() = path.to_str().unwrap().to_string();
     }
     fn remove_singer(&mut self, _path: PathBuf) {
         let keys: Vec<PathBuf> = self.params.sample_list.lock().unwrap().clone();
@@ -649,6 +654,7 @@ impl Plutau {
         }
         *self.params.singer_dir.lock().unwrap() = String::from("");
         *self.params.oto.lock().unwrap() = Oto::new(String::from(""));
+        *self.params.singer.lock().unwrap() = String::from("None");
     }
 }
 

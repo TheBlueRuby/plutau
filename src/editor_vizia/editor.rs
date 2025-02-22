@@ -17,6 +17,7 @@ use super::visualizer::{Visualizer, VisualizerData};
 #[derive(Lens)]
 struct Data {
     params: Arc<PlutauParams>,
+    singer_dir: Arc<Mutex<String>>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     debug: String,
     visualizer: Arc<VisualizerData>,
@@ -71,16 +72,18 @@ pub fn default_state() -> Arc<ViziaState> {
 
 pub fn create(
     params: Arc<PlutauParams>,
+    singer: Arc<Mutex<String>>,
     editor_state: Arc<ViziaState>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     visualizer: Arc<VisualizerData>,
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Custom, move |cx, _| {
         cx.add_theme(include_str!("theme.css"));
-        cx.add_fonts_mem(&[include_bytes!("./BebasNeue-Regular.ttf")]);
+        cx.add_fonts_mem(&[include_bytes!("./Audiowide-Regular.ttf")]);
 
         Data {
             params: params.clone(),
+            singer_dir: singer.clone(),
             producer: producer.clone(),
             debug: "nothing".into(),
             visualizer: visualizer.clone(),
@@ -100,16 +103,16 @@ pub fn create(
                 Label::new(cx, "Settings").class("heading");
                 GenericUi::new(cx, Data::params).id("settings-container");
 
-                // Label::new(cx, "Singer").class("heading");
-                // GenericUi::new(cx, Data::params.singer_dir).id("singer-container");
+                Label::new(cx, "Singer Directory").class("heading");
+                Label::new(cx, Data::singer_dir.map(|singer| singer.lock().unwrap().clone())).id("singer-container");
 
                 HStack::new(cx, |cx| {
-                    Label::new(cx, "Samples").class("heading");
+                    Label::new(cx, "Loaded Samples").class("heading");
 
                     Button::new(
                         cx,
                         |cx| cx.emit(AppEvent::OpenFilePicker),
-                        |cx| Label::new(cx, "Add Sample(s)"),
+                        |cx| Label::new(cx, "Choose Singer").id("add-sample-text"),
                     )
                     .id("add-sample-button");
                 })
@@ -131,7 +134,7 @@ pub fn create(
                                         .to_string_lossy()
                                         .to_string(),
                                 );
-                                Label::new(cx, "Remove").class("remove-label").on_press(
+                                Label::new(cx, "Remove All").class("remove-label").on_press(
                                     move |cx| cx.emit(AppEvent::RemoveSinger(item.get(cx).clone())),
                                 );
                             })
