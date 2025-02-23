@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use nih_plug::prelude::*;
 
 use plutau::Plutau;

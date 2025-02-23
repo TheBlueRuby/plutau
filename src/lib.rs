@@ -261,67 +261,17 @@ impl Plugin for Plutau {
                     match playing_sample.state {
                         PlayingState::ATTACK => {
                             if playing_sample.position >= playing_sample.vowel_start as isize {
-                                nih_log!(
-                                    "a-s,a pos: {}, state: {:?}, start: {}, end: {}",
-                                    playing_sample.position,
-                                    playing_sample.state,
-                                    playing_sample.vowel_start,
-                                    playing_sample.vowel_end
-                                );
                                 playing_sample.state = PlayingState::SUSTAIN;
-                                nih_log!(
-                                    "a-s,s pos: {}, state: {:?}, start: {}, end: {}",
-                                    playing_sample.position,
-                                    playing_sample.state,
-                                    playing_sample.vowel_start,
-                                    playing_sample.vowel_end
-                                );
-                            } else {
-                                nih_log!(
-                                    "a pos: {}, state: {:?}, start: {}, end: {}",
-                                    playing_sample.position,
-                                    playing_sample.state,
-                                    playing_sample.vowel_start,
-                                    playing_sample.vowel_end
-                                );
                             }
                         }
                         PlayingState::SUSTAIN => {
-                            nih_log!(
-                                "s pos: {}, state: {:?}, start: {}, end: {}",
-                                playing_sample.position,
-                                playing_sample.state,
-                                playing_sample.vowel_start,
-                                playing_sample.vowel_end
-                            );
                             if playing_sample.position > playing_sample.vowel_end as isize {
-                                nih_log!(
-                                    "loop! a pos: {}, state: {:?}, start: {}, end: {}",
-                                    playing_sample.position,
-                                    playing_sample.state,
-                                    playing_sample.vowel_start,
-                                    playing_sample.vowel_end
-                                );
                                 playing_sample.position = playing_sample.vowel_start as isize;
-                                nih_log!(
-                                    "loop! b pos: {}, state: {:?}, start: {}, end: {}",
-                                    playing_sample.position,
-                                    playing_sample.state,
-                                    playing_sample.vowel_start,
-                                    playing_sample.vowel_end
-                                );
                             }
                         }
                         PlayingState::RELEASE => {
                             playing_sample.position = playing_sample.vowel_end as isize;
                             playing_sample.state = PlayingState::DONE;
-                            nih_log!(
-                                "r-d,d pos: {}, state: {:?}, start: {}, end: {}",
-                                playing_sample.position,
-                                playing_sample.state,
-                                playing_sample.vowel_start,
-                                playing_sample.vowel_end
-                            );
                         }
                         _ => {}
                     }
@@ -525,13 +475,6 @@ impl Plutau {
                             playing_sample.position = -(event.timing() as isize);
 
                             playing_sample.state = PlayingState::ATTACK;
-                            nih_log!(
-                                "pos: {}, state: {:?}, start: {}, end: {}",
-                                playing_sample.position,
-                                playing_sample.state,
-                                playing_sample.vowel_start,
-                                playing_sample.vowel_end
-                            );
 
                             self.playing_samples.push(playing_sample);
                         }

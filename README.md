@@ -6,19 +6,46 @@ Based on [nih-sampler](https://github.com/matidfk/nih-sampler).
 
 ## Features:
 - Resampling with [TD-PSOLA](https://codeberg.org/PieterPenninckx/tdpsola)
-- Loads UTF-8 CV Utauloids
+- Loads Utauloids (CV and UTF-8 Only)
+
+## Installation
+- Copy the `plutau.vst3` folder to your VST3 directory. (`C:\Program Files\Common Files\VST3` on Windows)
+- If your DAW supports CLAP, copy `plutau.clap` to your CLAP directory (`C:\Program Files\Common Files\CLAP` on Windows)
+- Refresh your DAW's plugin list
+- Check the Instruments/Generators section of the plugins menu. The VST3 version may be under Samplers.
+- If possible, use the CLAP version of the plugin as it is the one that has been tested more.
 
 ## Usage
 
-- Click "Add Singer" and browse to your Utau's folder (open the folder with your oto.ini and select)
-- Input melody with a MIDI sequence (Monophonic, notes played while first is held will change pitch)
-- Choose phonemes by automating Vowel and Consonant parameters
+- Click "Add Singer" and browse to your Utau's folder (the one that contains oto.ini)
+- Input melody with a MIDI sequence (monophonic)
+- Automate the Vowel and Consonant parameters to choose phonemes
+
+## Troubleshooting
+
+### My Utau samples look garbled in the UI (wrong characters or missing character points)
+Your Utau might be using Shift-JIS encoding. OpenUtau can convert them to UTF-8 banks.
+You will also need to convert the oto.ini to UTF-8, which VS Code can do with "reopen with encoding" and "save as encoding".
+
+### New notes play the last phoneme, not the new one
+Sometimes the phoneme can be updated after the note is registered but still within the same processing cycle.
+You can move the automation point to just before the new note and it should work, however I am still trying to figure out a proper solution.
+
+### My issue isn't listed here
+Check the TODO section below, if the issue isn't mentioned there, open an issue on the repository's issues page.
+Support on the project is welcome, so if you have a solution or suggestion, please let me know!
 
 ## TODO:
+- Support for phonemes using small ya, yo, yu
 - UI improvements
 - Shift-JIS to UTF-8 for oto parsing
 - Declicking
-- Smooth pitch bend & tuning
+- Smooth pitch bend & tuning support
+- Preutterance (maybe use latency compensation?)
+- Detect whether the bank uses Hiragana, Katakana or Latin alphabet and adjust accordingly
+- Detect whether the bank is UTF-8 or Shift-JIS and translate if needed
+- Sample crossfade support
+- Better updating of phonemes
 
 ## Building
 
