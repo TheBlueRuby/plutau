@@ -18,6 +18,7 @@ use super::visualizer::{Visualizer, VisualizerData};
 struct Data {
     params: Arc<PlutauParams>,
     singer_dir: Arc<Mutex<String>>,
+    cur_sample: Arc<Mutex<String>>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     debug: String,
     visualizer: Arc<VisualizerData>,
@@ -73,6 +74,7 @@ pub fn default_state() -> Arc<ViziaState> {
 pub fn create(
     params: Arc<PlutauParams>,
     singer: Arc<Mutex<String>>,
+    sample: Arc<Mutex<String>>,
     editor_state: Arc<ViziaState>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     visualizer: Arc<VisualizerData>,
@@ -84,6 +86,7 @@ pub fn create(
         Data {
             params: params.clone(),
             singer_dir: singer.clone(),
+            cur_sample: sample.clone(),
             producer: producer.clone(),
             debug: "nothing".into(),
             visualizer: visualizer.clone(),
@@ -105,6 +108,9 @@ pub fn create(
 
                 Label::new(cx, "Singer Directory").class("heading");
                 Label::new(cx, Data::singer_dir.map(|singer| singer.lock().unwrap().clone())).id("singer-container");
+
+                Label::new(cx, "Current Sample").class("heading");
+                Label::new(cx, Data::cur_sample.map(|sample| sample.lock().unwrap().clone())).id("sample-container");
 
                 HStack::new(cx, |cx| {
                     Label::new(cx, "Loaded Samples").class("heading");

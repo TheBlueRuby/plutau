@@ -116,3 +116,10 @@ param-slider {
   child-space: 2px;
   height: auto;
 }
+
+#sample-container {
+  background-color: #282828;
+  border-radius: 5px;
+  child-space: 2px;
+  height: auto;
+}
