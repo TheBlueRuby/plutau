@@ -62,7 +62,7 @@ impl SysExLyric {
         let mut lyric_16: [u16; 2] = [0; 2];
         lyric_16[0] = ((lyric[0] as u16) << 8) | lyric[1] as u16;
         lyric_16[1] = ((lyric[2] as u16) << 8) | lyric[3] as u16;
-        String::from_utf16_lossy(&lyric_16)
+        String::from_utf16_lossy(&lyric_16).trim().to_string()
     }
     pub fn get_latin(&self) -> String {
         //TODO: implement conversion from jpn_utf8 to latin

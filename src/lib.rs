@@ -67,7 +67,7 @@ impl Default for Plutau {
             consumer: RefCell::new(None),
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
-            lyric: SysExLyric::from_buffer([0; 6].as_ref()).unwrap(),
+            lyric: SysExLyric::from_buffer([0xF0, 0x30, 0x42, 0xF7].as_ref()).unwrap(),
             sample_frequency: 440.0,
             midi_frequency: 440.0,
         }
@@ -419,10 +419,12 @@ impl Plutau {
                         }
                         nih_log!("playing note: {}", note);
 
-                        let phoneme = self.params.singer_dir.lock().unwrap().clone()
-                            + std::path::MAIN_SEPARATOR_STR
-                            + self.lyric.get_jpn_utf8().as_str()
-                            + ".wav";
+                        let phoneme = format!(
+                            "{}{}{}.wav",
+                            self.params.singer_dir.lock().unwrap().clone(),
+                            std::path::MAIN_SEPARATOR_STR,
+                            self.lyric.get_jpn_utf8()
+                        );
                         nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
                         if let Some((path, sample_data)) = self
@@ -435,7 +437,7 @@ impl Plutau {
                                 .oto
                                 .lock()
                                 .unwrap()
-                                .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                .get_entry(self.lyric.get_jpn_utf8() + ".wav")
                                 .unwrap()
                                 .offset as f32
                                 / 1000.0)
@@ -454,7 +456,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
                                     .unwrap()
                                     .consonant as f32
                                     / 1000.0)
@@ -466,7 +468,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
                                     .unwrap()
                                     .cutoff as f32
                                     / 1000.0)
@@ -499,7 +501,12 @@ impl Plutau {
                     } => {
                         if message.is_lyric() {
                             self.lyric = message;
-                            *self.params.cur_sample.lock().unwrap() = self.lyric.get_jpn_utf8().clone();    
+                            *self.params.cur_sample.lock().unwrap() = format!(
+                                "{}{}{}.wav",
+                                self.params.singer_dir.lock().unwrap().clone(),
+                                std::path::MAIN_SEPARATOR_STR,
+                                self.lyric.get_jpn_utf8()
+                            );
                             nih_log!("Received lyric: {}", self.lyric.get_jpn_utf8());
                         } else {
                             nih_log!("Received SysEx message: {:?}", message);
