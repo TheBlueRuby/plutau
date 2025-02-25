@@ -17,9 +17,6 @@ use nih_plug::{prelude::*, util::midi_note_to_freq};
 mod editor_vizia;
 mod playing_sample;
 
-mod phoneme;
-use phoneme::Phoneme;
-
 mod frq_parse;
 use frq_parse::*;
 
