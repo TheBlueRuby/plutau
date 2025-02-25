@@ -33,6 +33,7 @@ impl SysExMessage for SysExLyric {
 
 impl SysExLyric {
     pub fn is_lyric(&self) -> bool {
+        nih_log!("Lyric: {:x?}, {}", self.raw, self.raw.len());
         if self.raw.len() != 6 {
             return false;
         }
@@ -59,9 +60,11 @@ impl SysExLyric {
             lyric = [self.raw[1], self.raw[2], self.raw[3], self.raw[4]];
             nih_log!("Lyric long: {:x?}", lyric);
         }
-        let mut lyric_16: [u16; 2] = [0; 2];
-        lyric_16[0] = ((lyric[0] as u16) << 8) | lyric[1] as u16;
-        lyric_16[1] = ((lyric[2] as u16) << 8) | lyric[3] as u16;
+        let mut lyric_16: Vec<u16> = vec![];
+        lyric_16.push(((lyric[0] as u16) << 8) | lyric[1] as u16);
+        if !self.short {
+            lyric_16.push(((lyric[2] as u16) << 8) | lyric[3] as u16);
+        }
         String::from_utf16_lossy(&lyric_16).trim().to_string()
     }
     pub fn get_latin(&self) -> String {
