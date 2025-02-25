@@ -429,7 +429,7 @@ impl Plutau {
                         // None if no samples are loaded
                         if let Some((path, sample_data)) = self
                             .loaded_samples
-                            .get_key_value(Path::new(phoneme.as_str()))
+                            .get_key_value(Path::new(&phoneme))
                         {
                             self.sample_frequency = sample_data.frequency;
                             let offset = (self
