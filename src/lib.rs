@@ -514,7 +514,7 @@ impl Plutau {
                         }
                     }
                     NoteEvent::MidiPitchBend { timing: _, channel: _, value } => {
-                        self.pitch_bend = ((value * 2.0) - 1.0) * self.params.bend_range.value();
+                        self.pitch_bend = (value - 0.5) * self.params.bend_range.value();
                     }
                     _ => (),
                 }
