@@ -13,7 +13,7 @@ use std::{
 };
 use tdpsola::{AlternatingHann, Speed, TdpsolaAnalysis, TdpsolaSynthesis};
 
-use nih_plug::{prelude::*, util::midi_note_to_freq};
+use nih_plug::prelude::*;
 mod editor_vizia;
 mod playing_sample;
 
@@ -25,6 +25,9 @@ use oto::*;
 
 mod sysex;
 use sysex::*;
+
+mod midi;
+use midi::*;
 
 /// A loaded sample stored as a vec of samples in the form:
 /// [
@@ -54,6 +57,7 @@ pub struct Plutau {
     pub sample_frequency: f32,
     pub midi_frequency: f32,
     pub pitch_bend: f32,
+    pub note: u8,
 }
 
 impl Default for Plutau {
@@ -69,6 +73,7 @@ impl Default for Plutau {
             sample_frequency: 440.0,
             midi_frequency: 440.0,
             pitch_bend: 0.0,
+            note: 0,
         }
     }
 }
@@ -116,10 +121,13 @@ impl Default for PlutauParams {
             bend_range: FloatParam::new(
                 "Bend Range",
                 2.0,
-                FloatRange::Linear { min: 0.0, max: 24.0 },
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 24.0,
+                },
             )
             .with_unit(" semitones")
-            .with_step_size(1.0)
+            .with_step_size(1.0),
         }
     }
 }
@@ -410,7 +418,8 @@ impl Plutau {
                 }
                 match event {
                     NoteEvent::NoteOn { note, velocity, .. } => {
-                        self.midi_frequency = midi_note_to_freq(note);
+                        self.note = note;
+                        self.midi_frequency = midi_to_hz(note as f32 + self.pitch_bend);
                         if !(self.playing_samples.is_empty()) {
                             if !(self.playing_samples[0].state == PlayingState::DONE
                                 || self.playing_samples[0].state == PlayingState::RELEASE)
@@ -428,9 +437,8 @@ impl Plutau {
                         );
                         nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
-                        if let Some((path, sample_data)) = self
-                            .loaded_samples
-                            .get_key_value(Path::new(&phoneme))
+                        if let Some((path, sample_data)) =
+                            self.loaded_samples.get_key_value(Path::new(&phoneme))
                         {
                             self.sample_frequency = sample_data.frequency;
                             let offset = (self
@@ -513,8 +521,13 @@ impl Plutau {
                             nih_log!("Received SysEx message: {:?}", message);
                         }
                     }
-                    NoteEvent::MidiPitchBend { timing: _, channel: _, value } => {
+                    NoteEvent::MidiPitchBend {
+                        timing: _,
+                        channel: _,
+                        value,
+                    } => {
                         self.pitch_bend = (value - 0.5) * self.params.bend_range.value();
+                        self.midi_frequency = midi_to_hz(self.note as f32 + self.pitch_bend);
                     }
                     _ => (),
                 }
