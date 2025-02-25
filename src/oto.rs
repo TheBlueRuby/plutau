@@ -56,7 +56,8 @@ impl Oto {
         }
     }
 
-    pub fn get_entry(&self, file: &str) -> Option<&OtoEntry> {
-        self.contents.iter().find(|entry| entry.file == file.as_bytes())
+    pub fn get_entry(&self, file: String) -> Option<&OtoEntry> {
+        nih_plug::nih_log!("{}", file);
+        self.contents.iter().find(|entry| String::from_utf8(entry.file.clone()).unwrap_or_default() == file)
     }
 }

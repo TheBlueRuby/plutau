@@ -17,14 +17,14 @@ use nih_plug::{prelude::*, util::midi_note_to_freq};
 mod editor_vizia;
 mod playing_sample;
 
-mod phoneme;
-use phoneme::Phoneme;
-
 mod frq_parse;
 use frq_parse::*;
 
 mod oto;
 use oto::*;
+
+mod sysex;
+use sysex::*;
 
 /// A loaded sample stored as a vec of samples in the form:
 /// [
@@ -50,7 +50,7 @@ pub struct Plutau {
     pub loaded_samples: HashMap<PathBuf, LoadedSample>,
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
-    pub lyric: Phoneme,
+    pub lyric: SysExLyric,
     pub sample_frequency: f32,
     pub midi_frequency: f32,
 }
@@ -64,7 +64,7 @@ impl Default for Plutau {
             consumer: RefCell::new(None),
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
-            lyric: Phoneme::new(0, 0),
+            lyric: SysExLyric::from_buffer([0xF0, 0x30, 0x42, 0xF7].as_ref()).unwrap(),
             sample_frequency: 440.0,
             midi_frequency: 440.0,
         }
@@ -83,16 +83,12 @@ pub struct PlutauParams {
     #[persist = "oto"]
     pub oto: Mutex<Oto>,
     pub singer: Arc<Mutex<String>>,
+    pub cur_sample: Arc<Mutex<String>>,
 
     #[id = "gain"]
     pub gain: FloatParam,
     #[id = "instant-cutoff"]
     pub instant_cutoff: BoolParam,
-
-    #[id = "vowel"]
-    pub vowel: IntParam,
-    #[id = "consonant"]
-    pub consonant: IntParam,
 }
 
 impl Default for PlutauParams {
@@ -111,9 +107,8 @@ impl Default for PlutauParams {
             instant_cutoff: BoolParam::new("Instant Cutoff", true),
             singer_dir: Mutex::new(String::from("")),
             singer: Arc::new(Mutex::new(String::from("None"))),
+            cur_sample: Arc::new(Mutex::new(String::from(""))),
             oto: Mutex::new(Oto::new(String::from(""))),
-            vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
-            consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
         }
     }
 }
@@ -128,7 +123,7 @@ impl Plugin for Plutau {
     const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::Basic;
 
-    type SysExMessage = ();
+    type SysExMessage = SysExLyric;
     type BackgroundTask = ();
 
     const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
@@ -148,6 +143,7 @@ impl Plugin for Plutau {
         editor_vizia::create(
             self.params.clone(),
             self.params.singer.clone(),
+            self.params.cur_sample.clone(),
             self.params.editor_state.clone(),
             Arc::new(Mutex::new(producer)),
             Arc::clone(&self.visualizer),
@@ -413,19 +409,17 @@ impl Plutau {
                         }
                         nih_log!("playing note: {}", note);
 
-                        self.lyric = Phoneme::new(
-                            self.params.vowel.value() as u8,
-                            self.params.consonant.value() as u8,
+                        let phoneme = format!(
+                            "{}{}{}.wav",
+                            self.params.singer_dir.lock().unwrap().clone(),
+                            std::path::MAIN_SEPARATOR_STR,
+                            self.lyric.get_jpn_utf8()
                         );
-                        let phoneme = self.params.singer_dir.lock().unwrap().clone()
-                            + std::path::MAIN_SEPARATOR_STR
-                            + self.lyric.get_jpn_utf8().as_str()
-                            + ".wav";
                         nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
                         if let Some((path, sample_data)) = self
                             .loaded_samples
-                            .get_key_value(Path::new(phoneme.as_str()))
+                            .get_key_value(Path::new(&phoneme))
                         {
                             self.sample_frequency = sample_data.frequency;
                             let offset = (self
@@ -433,7 +427,7 @@ impl Plutau {
                                 .oto
                                 .lock()
                                 .unwrap()
-                                .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                .get_entry(self.lyric.get_jpn_utf8() + ".wav")
                                 .unwrap()
                                 .offset as f32
                                 / 1000.0)
@@ -452,7 +446,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
                                     .unwrap()
                                     .consonant as f32
                                     / 1000.0)
@@ -464,7 +458,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry((self.lyric.get_jpn_utf8() + ".wav").as_str())
+                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
                                     .unwrap()
                                     .cutoff as f32
                                     / 1000.0)
@@ -489,6 +483,24 @@ impl Plutau {
                         self.playing_samples
                             .iter_mut()
                             .for_each(|e| e.state = PlayingState::RELEASE);
+                    }
+                    NoteEvent::MidiSysEx {
+                        timing: _timing,
+                        message,
+                        ..
+                    } => {
+                        if message.is_lyric() {
+                            self.lyric = message;
+                            *self.params.cur_sample.lock().unwrap() = format!(
+                                "{}{}{}.wav",
+                                self.params.singer_dir.lock().unwrap().clone(),
+                                std::path::MAIN_SEPARATOR_STR,
+                                self.lyric.get_jpn_utf8()
+                            );
+                            nih_log!("Received lyric: {}", self.lyric.get_jpn_utf8());
+                        } else {
+                            nih_log!("Received SysEx message: {:?}", message);
+                        }
                     }
                     _ => (),
                 }
@@ -586,8 +598,20 @@ impl Plutau {
         });
 
         *self.params.singer_dir.lock().unwrap() = path.clone().to_str().unwrap().to_string();
-        let singer_name = path.as_os_str().to_str().unwrap().to_string().split(std::path::MAIN_SEPARATOR).last().unwrap().to_string();
-        nih_log!("loaded singer {} from {}", singer_name, path.to_str().unwrap());
+        let singer_name = path
+            .as_os_str()
+            .to_str()
+            .unwrap()
+            .to_string()
+            .split(std::path::MAIN_SEPARATOR)
+            .last()
+            .unwrap()
+            .to_string();
+        nih_log!(
+            "loaded singer {} from {}",
+            singer_name,
+            path.to_str().unwrap()
+        );
         *self.params.singer.lock().unwrap() = path.to_str().unwrap().to_string();
     }
     fn remove_singer(&mut self, _path: PathBuf) {
