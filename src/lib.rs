@@ -89,11 +89,6 @@ pub struct PlutauParams {
     pub gain: FloatParam,
     #[id = "instant-cutoff"]
     pub instant_cutoff: BoolParam,
-
-    #[id = "vowel"]
-    pub vowel: IntParam,
-    #[id = "consonant"]
-    pub consonant: IntParam,
 }
 
 impl Default for PlutauParams {
@@ -114,8 +109,6 @@ impl Default for PlutauParams {
             singer: Arc::new(Mutex::new(String::from("None"))),
             cur_sample: Arc::new(Mutex::new(String::from(""))),
             oto: Mutex::new(Oto::new(String::from(""))),
-            vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
-            consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
         }
     }
 }
