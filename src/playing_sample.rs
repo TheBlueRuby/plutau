@@ -7,6 +7,7 @@ pub struct PlayingSample {
     pub state: PlayingState,
     pub vowel_start: u32,
     pub vowel_end: u32,
+    pub ignore_fade: bool
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +27,7 @@ impl PlayingSample {
             state: PlayingState::ATTACK,
             vowel_start: 0,
             vowel_end: 0,
+            ignore_fade: true,
         }
     }
 }

@@ -98,6 +98,10 @@ pub struct PlutauParams {
     pub instant_cutoff: BoolParam,
     #[id = "bend-range"]
     pub bend_range: FloatParam,
+    #[id = "crossfade-length"]
+    pub crossfade_length: IntParam,
+    #[id = "crossfade-on"]
+    pub crossfade_on: BoolParam,
 }
 
 impl Default for PlutauParams {
@@ -128,6 +132,13 @@ impl Default for PlutauParams {
             )
             .with_unit(" semitones")
             .with_step_size(1.0),
+            crossfade_length: IntParam::new(
+                "Crossfade Length",
+                100,
+                IntRange::Linear { min: 0, max: 1000 },
+            )
+            .with_unit(" samples"),
+            crossfade_on: BoolParam::new("Crossfade", true),
         }
     }
 }
@@ -267,8 +278,65 @@ impl Plugin for Plutau {
                                 .get(playing_sample.position as usize)
                                 .unwrap_or(&0.0)
                                 * playing_sample.gain;
-                            *sample += s;
-                            amplitude += s.abs();
+
+                            if self.params.crossfade_on.value() {
+                                if playing_sample.ignore_fade {
+                                    *sample += s;
+                                    amplitude += s.abs();
+                                } else {
+                                    nih_log!(
+                                        "pos: {}, start: {}, end: {}, crossfade start: {}",
+                                        playing_sample.position,
+                                        playing_sample.vowel_start,
+                                        playing_sample.vowel_end,
+                                        playing_sample.vowel_end
+                                            - self.params.crossfade_length.value() as u32
+                                    );
+                                    // If crossfade has started, average samples from current point and from the loop start with offset
+                                    if playing_sample.position
+                                        >= (playing_sample.vowel_end
+                                            - self.params.crossfade_length.value() as u32)
+                                            as isize
+                                    {
+                                        let offset = playing_sample.position
+                                            - (playing_sample.vowel_end
+                                                - self.params.crossfade_length.value() as u32)
+                                                as isize;
+                                        nih_log!(
+                                            "crossfade offset: {}, new sample pos: {}",
+                                            offset,
+                                            playing_sample.vowel_start as isize + offset as isize
+                                        );
+                                        let s2 = shifted_sample
+                                            .samples
+                                            .get(channel_index)
+                                            .unwrap_or(&vec![])
+                                            .get(
+                                                playing_sample.vowel_start as usize
+                                                    + offset as usize,
+                                            )
+                                            .unwrap_or(&0.0)
+                                            * playing_sample.gain;
+                                        nih_log!("s: {}, s2: {}", s, s2);
+                                        let ratio = offset as f32
+                                            / self.params.crossfade_length.value() as f32;
+                                        nih_log!(
+                                            "with ratio {}: s: {}, s2: {}",
+                                            ratio,
+                                            s * (1.0 - ratio),
+                                            s2 * ratio
+                                        );
+                                        *sample += s * (1.0 - ratio) + s2 * ratio * playing_sample.gain;
+                                        amplitude += (s.abs() * (1.0 - ratio)) + (s2.abs() * ratio) * playing_sample.gain;
+                                    } else {
+                                        *sample += s;
+                                        amplitude += s.abs();
+                                    }
+                                }
+                            } else {
+                                *sample += s;
+                                amplitude += s.abs();
+                            }
                         }
                     }
                     playing_sample.position += 1;
@@ -281,10 +349,20 @@ impl Plugin for Plutau {
                         }
                         PlayingState::SUSTAIN => {
                             if playing_sample.position > playing_sample.vowel_end as isize {
-                                playing_sample.position = playing_sample.vowel_start as isize;
+                                playing_sample.position = (playing_sample.vowel_start
+                                    + self.params.crossfade_length.value() as u32)
+                                    as isize;
+                            }
+                            if playing_sample.position
+                                > (playing_sample.vowel_start
+                                    + self.params.crossfade_length.value() as u32)
+                                    as isize
+                            {
+                                playing_sample.ignore_fade = false;
                             }
                         }
                         PlayingState::RELEASE => {
+                            playing_sample.ignore_fade = true;
                             playing_sample.position = playing_sample.vowel_end as isize;
                             playing_sample.state = PlayingState::DONE;
                         }
