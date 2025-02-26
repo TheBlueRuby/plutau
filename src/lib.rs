@@ -604,7 +604,7 @@ impl Plutau {
                         channel: _,
                         value,
                     } => {
-                        self.pitch_bend = (value - 0.5) * self.params.bend_range.value();
+                        self.pitch_bend = (value - 0.5) * 2.0 * self.params.bend_range.value();
                         self.midi_frequency = midi_to_hz(self.note as f32 + self.pitch_bend);
                     }
                     _ => (),
