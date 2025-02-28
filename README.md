@@ -38,11 +38,10 @@ Support on the project is welcome, so if you have a solution or suggestion, plea
 ## TODO:
 - UI improvements
 - Shift-JIS to UTF-8 for oto parsing
-- Declicking and general smoothing
+- Pitch bend decrackling
 - Preutterance (maybe use latency compensation?)
 - Detect whether the bank uses Hiragana, Katakana or Latin alphabet and adjust accordingly
 - Detect whether the bank is UTF-8 or Shift-JIS and translate if needed
-- Sample crossfade support
 - Better updating of phonemes
 
 ## Building
