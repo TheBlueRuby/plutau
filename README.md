@@ -19,7 +19,7 @@ Based on [nih-sampler](https://github.com/matidfk/nih-sampler).
 
 - Click "Add Singer" and browse to your Utau's folder (the one that contains oto.ini)
 - Input melody with a MIDI sequence (monophonic)
-- Automate the Vowel and Consonant parameters to choose phonemes
+- Use SysEx events to enter characters. Use the UTF-8 codepoints (e.g. 0x30 0x42 for あ).
 
 ## Troubleshooting
 
@@ -36,15 +36,12 @@ Check the TODO section below, if the issue isn't mentioned there, open an issue 
 Support on the project is welcome, so if you have a solution or suggestion, please let me know!
 
 ## TODO:
-- Support for phonemes using small ya, yo, yu
 - UI improvements
 - Shift-JIS to UTF-8 for oto parsing
-- Declicking
-- Smooth pitch bend & tuning support
+- Pitch bend decrackling
 - Preutterance (maybe use latency compensation?)
 - Detect whether the bank uses Hiragana, Katakana or Latin alphabet and adjust accordingly
 - Detect whether the bank is UTF-8 or Shift-JIS and translate if needed
-- Sample crossfade support
 - Better updating of phonemes
 
 ## Building

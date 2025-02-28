@@ -13,7 +13,7 @@ use std::{
 };
 use tdpsola::{AlternatingHann, Speed, TdpsolaAnalysis, TdpsolaSynthesis};
 
-use nih_plug::{prelude::*, util::midi_note_to_freq};
+use nih_plug::prelude::*;
 mod editor_vizia;
 mod playing_sample;
 
@@ -25,6 +25,9 @@ use oto::*;
 
 mod sysex;
 use sysex::*;
+
+mod midi;
+use midi::*;
 
 /// A loaded sample stored as a vec of samples in the form:
 /// [
@@ -53,6 +56,8 @@ pub struct Plutau {
     pub lyric: SysExLyric,
     pub sample_frequency: f32,
     pub midi_frequency: f32,
+    pub pitch_bend: f32,
+    pub note: u8,
 }
 
 impl Default for Plutau {
@@ -67,6 +72,8 @@ impl Default for Plutau {
             lyric: SysExLyric::from_buffer([0xF0, 0x30, 0x42, 0xF7].as_ref()).unwrap(),
             sample_frequency: 440.0,
             midi_frequency: 440.0,
+            pitch_bend: 0.0,
+            note: 0,
         }
     }
 }
@@ -89,6 +96,12 @@ pub struct PlutauParams {
     pub gain: FloatParam,
     #[id = "instant-cutoff"]
     pub instant_cutoff: BoolParam,
+    #[id = "bend-range"]
+    pub bend_range: FloatParam,
+    #[id = "crossfade-length"]
+    pub crossfade_length: IntParam,
+    #[id = "crossfade-on"]
+    pub crossfade_on: BoolParam,
 }
 
 impl Default for PlutauParams {
@@ -109,6 +122,23 @@ impl Default for PlutauParams {
             singer: Arc::new(Mutex::new(String::from("None"))),
             cur_sample: Arc::new(Mutex::new(String::from(""))),
             oto: Mutex::new(Oto::new(String::from(""))),
+            bend_range: FloatParam::new(
+                "Bend Range",
+                2.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 24.0,
+                },
+            )
+            .with_unit(" semitones")
+            .with_step_size(1.0),
+            crossfade_length: IntParam::new(
+                "Crossfade Length",
+                100,
+                IntRange::Linear { min: 0, max: 1000 },
+            )
+            .with_unit(" samples"),
+            crossfade_on: BoolParam::new("Crossfade", true),
         }
     }
 }
@@ -120,8 +150,8 @@ impl Plugin for Plutau {
     const EMAIL: &'static str = "info@example.com";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
     const SAMPLE_ACCURATE_AUTOMATION: bool = false;
-    const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
-    const MIDI_OUTPUT: MidiConfig = MidiConfig::Basic;
+    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
+    const MIDI_OUTPUT: MidiConfig = MidiConfig::MidiCCs;
 
     type SysExMessage = SysExLyric;
     type BackgroundTask = ();
@@ -248,8 +278,65 @@ impl Plugin for Plutau {
                                 .get(playing_sample.position as usize)
                                 .unwrap_or(&0.0)
                                 * playing_sample.gain;
-                            *sample += s;
-                            amplitude += s.abs();
+
+                            if self.params.crossfade_on.value() {
+                                if playing_sample.ignore_fade {
+                                    *sample += s;
+                                    amplitude += s.abs();
+                                } else {
+                                    nih_log!(
+                                        "pos: {}, start: {}, end: {}, crossfade start: {}",
+                                        playing_sample.position,
+                                        playing_sample.vowel_start,
+                                        playing_sample.vowel_end,
+                                        playing_sample.vowel_end
+                                            - self.params.crossfade_length.value() as u32
+                                    );
+                                    // If crossfade has started, average samples from current point and from the loop start with offset
+                                    if playing_sample.position
+                                        >= (playing_sample.vowel_end
+                                            - self.params.crossfade_length.value() as u32)
+                                            as isize
+                                    {
+                                        let offset = playing_sample.position
+                                            - (playing_sample.vowel_end
+                                                - self.params.crossfade_length.value() as u32)
+                                                as isize;
+                                        nih_log!(
+                                            "crossfade offset: {}, new sample pos: {}",
+                                            offset,
+                                            playing_sample.vowel_start as isize + offset as isize
+                                        );
+                                        let s2 = shifted_sample
+                                            .samples
+                                            .get(channel_index)
+                                            .unwrap_or(&vec![])
+                                            .get(
+                                                playing_sample.vowel_start as usize
+                                                    + offset as usize,
+                                            )
+                                            .unwrap_or(&0.0)
+                                            * playing_sample.gain;
+                                        nih_log!("s: {}, s2: {}", s, s2);
+                                        let ratio = offset as f32
+                                            / self.params.crossfade_length.value() as f32;
+                                        nih_log!(
+                                            "with ratio {}: s: {}, s2: {}",
+                                            ratio,
+                                            s * (1.0 - ratio),
+                                            s2 * ratio
+                                        );
+                                        *sample += s * (1.0 - ratio) + s2 * ratio * playing_sample.gain;
+                                        amplitude += (s.abs() * (1.0 - ratio)) + (s2.abs() * ratio) * playing_sample.gain;
+                                    } else {
+                                        *sample += s;
+                                        amplitude += s.abs();
+                                    }
+                                }
+                            } else {
+                                *sample += s;
+                                amplitude += s.abs();
+                            }
                         }
                     }
                     playing_sample.position += 1;
@@ -262,10 +349,20 @@ impl Plugin for Plutau {
                         }
                         PlayingState::SUSTAIN => {
                             if playing_sample.position > playing_sample.vowel_end as isize {
-                                playing_sample.position = playing_sample.vowel_start as isize;
+                                playing_sample.position = (playing_sample.vowel_start
+                                    + self.params.crossfade_length.value() as u32)
+                                    as isize;
+                            }
+                            if playing_sample.position
+                                > (playing_sample.vowel_start
+                                    + self.params.crossfade_length.value() as u32)
+                                    as isize
+                            {
+                                playing_sample.ignore_fade = false;
                             }
                         }
                         PlayingState::RELEASE => {
+                            playing_sample.ignore_fade = true;
                             playing_sample.position = playing_sample.vowel_end as isize;
                             playing_sample.state = PlayingState::DONE;
                         }
@@ -399,7 +496,8 @@ impl Plutau {
                 }
                 match event {
                     NoteEvent::NoteOn { note, velocity, .. } => {
-                        self.midi_frequency = midi_note_to_freq(note);
+                        self.note = note;
+                        self.midi_frequency = midi_to_hz(note as f32 + self.pitch_bend);
                         if !(self.playing_samples.is_empty()) {
                             if !(self.playing_samples[0].state == PlayingState::DONE
                                 || self.playing_samples[0].state == PlayingState::RELEASE)
@@ -417,9 +515,8 @@ impl Plutau {
                         );
                         nih_log!("playing phoneme: {}", phoneme);
                         // None if no samples are loaded
-                        if let Some((path, sample_data)) = self
-                            .loaded_samples
-                            .get_key_value(Path::new(&phoneme))
+                        if let Some((path, sample_data)) =
+                            self.loaded_samples.get_key_value(Path::new(&phoneme))
                         {
                             self.sample_frequency = sample_data.frequency;
                             let offset = (self
@@ -501,6 +598,14 @@ impl Plutau {
                         } else {
                             nih_log!("Received SysEx message: {:?}", message);
                         }
+                    }
+                    NoteEvent::MidiPitchBend {
+                        timing: _,
+                        channel: _,
+                        value,
+                    } => {
+                        self.pitch_bend = (value - 0.5) * 2.0 * self.params.bend_range.value();
+                        self.midi_frequency = midi_to_hz(self.note as f32 + self.pitch_bend);
                     }
                     _ => (),
                 }
