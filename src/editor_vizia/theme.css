@@ -33,6 +33,11 @@
   font-family: "Audiowide";
 }
 
+#version {
+  font-size: 16px;
+  font-family: "Audiowide";
+}
+
 #container {
   border-width: 2px;
   border-color: #141414;

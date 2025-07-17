@@ -690,7 +690,6 @@ impl Vst3Plugin for Plutau {
     const VST3_CLASS_ID: [u8; 16] = *b"Avi86UtauPlugin1";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
         Vst3SubCategory::Generator,
-        Vst3SubCategory::Sampler,
         Vst3SubCategory::Instrument,
     ];
 }

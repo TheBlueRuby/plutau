@@ -97,6 +97,7 @@ pub fn create(
         VStack::new(cx, |cx| {
             HStack::new(cx, |cx| {
                 Label::new(cx, "Plutau").id("logo");
+                Label::new(cx, env!("CARGO_PKG_VERSION")).id("version");
                 Visualizer::new(cx, Data::visualizer).id("visualizer");
             })
             .class("top-bar");
@@ -107,10 +108,18 @@ pub fn create(
                 GenericUi::new(cx, Data::params).id("settings-container");
 
                 Label::new(cx, "Singer Directory").class("heading");
-                Label::new(cx, Data::singer_dir.map(|singer| singer.lock().unwrap().clone())).id("singer-container");
+                Label::new(
+                    cx,
+                    Data::singer_dir.map(|singer| singer.lock().unwrap().clone()),
+                )
+                .id("singer-container");
 
                 Label::new(cx, "Current Sample").class("heading");
-                Label::new(cx, Data::cur_sample.map(|sample| sample.lock().unwrap().clone())).id("sample-container");
+                Label::new(
+                    cx,
+                    Data::cur_sample.map(|sample| sample.lock().unwrap().clone()),
+                )
+                .id("sample-container");
 
                 HStack::new(cx, |cx| {
                     Label::new(cx, "Loaded Samples").class("heading");
