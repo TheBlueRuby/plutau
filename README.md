@@ -19,7 +19,10 @@ Based on [nih-sampler](https://github.com/matidfk/nih-sampler).
 
 - Click "Add Singer" and browse to your Utau's folder (the one that contains oto.ini)
 - Input melody with a MIDI sequence (monophonic)
-- Use SysEx events to enter characters. Use the UTF-8 codepoints (e.g. 0x30 0x42 for あ).
+- Enter the lyrics using one of the following methods:
+    - Enter the lyrics directly into the UI (space-separated phonemes)
+    - Automate the lyric parameters
+    - Use SysEx events to enter characters. Use the UTF-8 codepoints (e.g. 0x30 0x42 for あ).
 
 ## Troubleshooting
 
@@ -36,6 +39,7 @@ Check the TODO section below, if the issue isn't mentioned there, open an issue 
 Support on the project is welcome, so if you have a solution or suggestion, please let me know!
 
 ## TODO:
+- All methods of entering phonemes
 - UI improvements
 - Shift-JIS to UTF-8 for oto parsing
 - Pitch bend decrackling
