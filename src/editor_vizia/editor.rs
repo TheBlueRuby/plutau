@@ -19,6 +19,7 @@ struct Data {
     params: Arc<PlutauParams>,
     singer_dir: Arc<Mutex<String>>,
     cur_sample: Arc<Mutex<String>>,
+    lyrics: Arc<Mutex<String>>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     debug: String,
     visualizer: Arc<VisualizerData>,
@@ -26,15 +27,17 @@ struct Data {
 
 #[derive(Clone)]
 enum AppEvent {
-    OpenFilePicker,
+    OpenSingerFilePicker,
     LoadSinger(PathBuf),
     RemoveSinger(PathBuf),
+    OpenLyricFilePicker,
+    LoadLyric(PathBuf),
 }
 
 impl Model for Data {
     fn event(&mut self, cx: &mut EventContext, event: &mut Event) {
         event.map(|app_event, _| match app_event {
-            AppEvent::OpenFilePicker => {
+            AppEvent::OpenSingerFilePicker => {
                 cx.spawn(|cx_proxy| {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
                         cx_proxy.emit(AppEvent::LoadSinger(path));
@@ -63,6 +66,24 @@ impl Model for Data {
                     self.debug = e.to_string();
                 }
             }
+            AppEvent::OpenLyricFilePicker => {
+                cx.spawn(|cx_proxy| {
+                    if let Some(path) = rfd::FileDialog::new().pick_file() {
+                        cx_proxy.emit(AppEvent::LoadLyric(path));
+                    }
+                });
+            }
+            AppEvent::LoadLyric(path) => {
+                self.debug = format!("loading: {path:?}");
+                if let Err(e) = self
+                    .producer
+                    .lock()
+                    .unwrap()
+                    .push(ThreadMessage::LoadLyric(path.clone()))
+                {
+                    self.debug = e.to_string();
+                }
+            }
         });
     }
 }
@@ -75,6 +96,7 @@ pub fn create(
     params: Arc<PlutauParams>,
     singer: Arc<Mutex<String>>,
     sample: Arc<Mutex<String>>,
+    lyric_list: Arc<Mutex<String>>,
     editor_state: Arc<ViziaState>,
     producer: Arc<Mutex<rtrb::Producer<ThreadMessage>>>,
     visualizer: Arc<VisualizerData>,
@@ -87,6 +109,7 @@ pub fn create(
             params: params.clone(),
             singer_dir: singer.clone(),
             cur_sample: sample.clone(),
+            lyrics: lyric_list.clone(),
             producer: producer.clone(),
             debug: "nothing".into(),
             visualizer: visualizer.clone(),
@@ -107,29 +130,70 @@ pub fn create(
                 Label::new(cx, "Settings").class("heading");
                 GenericUi::new(cx, Data::params).id("settings-container");
 
+                HStack::new(cx, |cx| {
+                    Label::new(cx, "Lyrics").class("heading");
+                    Button::new(
+                        cx,
+                        |cx| {
+                            cx.emit(AppEvent::OpenLyricFilePicker);
+                        },
+                        |cx| Label::new(cx, "Choose Lyrics File").class("add-file-text"),
+                    )
+                    .class("add-file-button");
+                })
+                .height(Auto)
+                .col_between(Stretch(1.0));
+
+                ScrollView::new(cx, 0.0, 0.0, true, false, |cx| {
+                    Label::new(
+                        cx,
+                        Data::params.map(|params| {
+                            params
+                                .lyric_file
+                                .lock()
+                                .unwrap()
+                                .clone()
+                                .as_os_str()
+                                .to_str()
+                                .unwrap()
+                                .to_string()
+                        }),
+                    )
+                    .class("text-container")
+                    .min_width(Pixels(360.0));
+
+                    Label::new(
+                        cx,
+                        Data::lyrics.map(|lyrics| lyrics.lock().unwrap().clone()),
+                    )
+                    .class("text-container")
+                    .min_width(Pixels(360.0));
+                })
+                .class("lyric-scrollview");
+
                 Label::new(cx, "Singer Directory").class("heading");
                 Label::new(
                     cx,
                     Data::singer_dir.map(|singer| singer.lock().unwrap().clone()),
                 )
-                .id("singer-container");
+                .class("text-container");
 
                 Label::new(cx, "Current Sample").class("heading");
                 Label::new(
                     cx,
                     Data::cur_sample.map(|sample| sample.lock().unwrap().clone()),
                 )
-                .id("sample-container");
+                .class("text-container");
 
                 HStack::new(cx, |cx| {
                     Label::new(cx, "Loaded Samples").class("heading");
 
                     Button::new(
                         cx,
-                        |cx| cx.emit(AppEvent::OpenFilePicker),
-                        |cx| Label::new(cx, "Choose Singer").id("add-sample-text"),
+                        |cx| cx.emit(AppEvent::OpenSingerFilePicker),
+                        |cx| Label::new(cx, "Choose Singer").class("add-file-text"),
                     )
-                    .id("add-sample-button");
+                    .class("add-file-button");
                 })
                 .height(Auto)
                 .col_between(Stretch(1.0));

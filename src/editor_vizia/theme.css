@@ -43,7 +43,7 @@
   border-color: #141414;
 }
 
-#add-sample-button {
+.add-file-button {
   border-width: 0px;
   border-radius: 5px;
   background-color: #66377c;
@@ -51,11 +51,11 @@
   border-width: 2px;
 }
 
-#add-sample-text {
+.add-file-text {
   color: #f2f2f2;
 }
 
-#add-sample-button:hover {
+.add-file-button:hover {
   border-color: #9a27ed;
 }
 
@@ -106,6 +106,21 @@ param-slider {
   border-radius: 2px;
 }
 
+.lyric-scrollview > scrollbar > .thumb {
+  min-height: 5px;
+  height: 5px;
+  background-color: #f2f2f2;
+  border-radius: 2px;
+}
+
+.lyric-scrollview > scrollbar.horizontal {
+  height: 5px;
+  min-height: 5px;
+  background-color: #282828;
+  border-radius: 2px;
+}
+
+
 .remove-button {
   color: #f01e1e;
 }
@@ -115,16 +130,9 @@ param-slider {
   cursor: hand;
 }
 
-#singer-container {
+.text-container {
   background-color: #282828;
   border-radius: 5px;
   child-space: 2px;
-  height: auto;
-}
-
-#sample-container {
-  background-color: #282828;
-  border-radius: 5px;
-  child-space: 2px;
-  height: auto;
+  padding: 2px;
 }

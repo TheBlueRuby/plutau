@@ -45,6 +45,7 @@ pub struct LoadedSample {
 pub enum ThreadMessage {
     LoadSinger(PathBuf),
     RemoveSinger(PathBuf),
+    LoadLyric(PathBuf),
 }
 
 /// Main plugin struct
@@ -91,8 +92,12 @@ pub struct PlutauParams {
     pub singer_dir: Mutex<String>,
     #[persist = "oto"]
     pub oto: Mutex<Oto>,
+    #[persist = "lyric-file"]
+    pub lyric_file: Mutex<PathBuf>,
+
     pub singer: Arc<Mutex<String>>,
     pub cur_sample: Arc<Mutex<String>>,
+    pub lyrics: Arc<Mutex<String>>,
 
     #[id = "gain"]
     pub gain: FloatParam,
@@ -120,9 +125,11 @@ impl Default for PlutauParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             instant_cutoff: BoolParam::new("Instant Cutoff", true),
+            lyric_file: Mutex::new(PathBuf::from("")),
             singer_dir: Mutex::new(String::from("")),
             singer: Arc::new(Mutex::new(String::from("None"))),
             cur_sample: Arc::new(Mutex::new(String::from(""))),
+            lyrics: Arc::new(Mutex::new(String::from(""))),
             oto: Mutex::new(Oto::new(String::from(""))),
             bend_range: FloatParam::new(
                 "Bend Range",
@@ -176,6 +183,7 @@ impl Plugin for Plutau {
             self.params.clone(),
             self.params.singer.clone(),
             self.params.cur_sample.clone(),
+            self.params.lyrics.clone(),
             self.params.editor_state.clone(),
             Arc::new(Mutex::new(producer)),
             Arc::clone(&self.visualizer),
@@ -421,6 +429,9 @@ impl Plutau {
                     }
                     ThreadMessage::RemoveSinger(path) => {
                         self.remove_singer(path.clone());
+                    }
+                    ThreadMessage::LoadLyric(path) => {
+                        self.load_lyric(path.clone());
                     }
                 }
             }
@@ -670,6 +681,13 @@ impl Plutau {
         *self.params.singer_dir.lock().unwrap() = String::from("");
         *self.params.oto.lock().unwrap() = Oto::new(String::from(""));
         *self.params.singer.lock().unwrap() = String::from("None");
+    }
+
+    fn load_lyric(&mut self, path: PathBuf) {
+        if let Ok(contents) = fs::read_to_string(&path) {
+            *self.params.lyrics.lock().unwrap() = contents;
+            *self.params.lyric_file.lock().unwrap() = path;
+        }
     }
 }
 
