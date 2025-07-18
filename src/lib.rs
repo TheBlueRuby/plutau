@@ -67,6 +67,7 @@ pub struct Plutau {
     pub midi_frequency: f32,
     pub pitch_bend: f32,
     pub note: u8,
+    pub lyric: String,
 }
 
 impl Default for Plutau {
@@ -82,6 +83,7 @@ impl Default for Plutau {
             midi_frequency: 440.0,
             pitch_bend: 0.0,
             note: 0,
+            lyric: String::new(),
         }
     }
 }
@@ -232,6 +234,11 @@ impl Plugin for Plutau {
         self.process_midi(context, buffer);
 
         let mut amplitude = 0.0;
+
+        if !context.transport().playing {
+            // reset lyric index, may cause desyncs if not playing from start of song
+            self.params.lyric_settings.lock().unwrap().lyric_file.index = 0;
+        }
 
         for playing_sample in &mut self.playing_samples {
             // attempt to get sample data
@@ -495,12 +502,15 @@ impl Plutau {
                         );
                         
                         nih_log!("source: {:?}", self.params.lyric_settings.lock().unwrap().lyric_source);
+
+                        self.lyric = self.params.lyric_settings.lock().unwrap().get_jpn_utf8();
+
                         // phoneme will be the path to the phoneme wav file
                         let phoneme = format!(
                             "{}{}{}.wav",
                             self.params.singer_dir.lock().unwrap().clone(),
                             std::path::MAIN_SEPARATOR_STR,
-                            self.params.lyric_settings.lock().unwrap().get_jpn_utf8()
+                            self.lyric.clone()
                         );
                         nih_log!("playing phoneme: {}", phoneme);
                         *self.params.cur_sample.lock().unwrap() = phoneme.clone();
@@ -514,7 +524,7 @@ impl Plutau {
                                 .oto
                                 .lock()
                                 .unwrap()
-                                .get_entry(self.params.lyric_settings.lock().unwrap().get_jpn_utf8() + ".wav")
+                                .get_entry(self.lyric.clone() + ".wav")
                                 .unwrap()
                                 .offset as f32
                                 / 1000.0)
@@ -533,7 +543,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry(self.params.lyric_settings.lock().unwrap().get_jpn_utf8() + ".wav")
+                                    .get_entry(self.lyric.clone() + ".wav")
                                     .unwrap()
                                     .consonant as f32
                                     / 1000.0)
@@ -545,7 +555,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry(self.params.lyric_settings.lock().unwrap().get_jpn_utf8() + ".wav")
+                                    .get_entry(self.lyric.clone() + ".wav")
                                     .unwrap()
                                     .cutoff as f32
                                     / 1000.0)
@@ -582,7 +592,7 @@ impl Plutau {
                                 "{}{}{}.wav",
                                 self.params.singer_dir.lock().unwrap().clone(),
                                 std::path::MAIN_SEPARATOR_STR,
-                                self.params.lyric_settings.lock().unwrap().get_jpn_utf8()
+                                self.lyric
                             );
                             nih_log!("Received lyric: {}", self.params.lyric_settings.lock().unwrap().lyric_sysex.get_jpn_utf8());
                         } else {

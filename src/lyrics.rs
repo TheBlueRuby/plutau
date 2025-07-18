@@ -186,6 +186,9 @@ impl Lyric for FileLyric {
         if self.index < self.lyric_vec.len() {
             let lyric = self.lyric_vec[self.index].clone();
             self.index += 1; // Increment index for next call
+            if self.index >= self.lyric_vec.len() {
+                self.index = 0; // Reset index if it exceeds the length
+            }
             lyric
         } else {
             String::new()
@@ -203,8 +206,8 @@ impl FileLyric {
     pub fn new(path: PathBuf) -> Self {
         let lyric_vec = std::fs::read_to_string(&path)
             .unwrap_or_default()
-            .lines()
-            .map(|line| line.to_string())
+            .split_whitespace()
+            .map(|chunk| chunk.to_string())
             .collect();
         Self {
             path,
