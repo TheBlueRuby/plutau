@@ -106,7 +106,6 @@ pub struct PlutauParams {
     pub cur_sample: Arc<Mutex<String>>,
     pub lyrics: Arc<Mutex<String>>,
 
-
     #[id = "vowel"]
     pub vowel: IntParam,
 
@@ -230,6 +229,13 @@ impl Plugin for Plutau {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
+        // clear buffers to prevent buzzing sound on daws which dont
+        for buf in buffer.as_slice().iter_mut() {
+            for s in buf.iter_mut() {
+                *s = 0.0;
+            }
+        }
+
         self.process_messages();
         self.process_midi(context, buffer);
 
@@ -464,7 +470,11 @@ impl Plutau {
                             2 => LyricSource::SysEx,
                             _ => LyricSource::Param,
                         };
-                        self.params.lyric_settings.lock().unwrap().set_lyric_source(source.clone());
+                        self.params
+                            .lyric_settings
+                            .lock()
+                            .unwrap()
+                            .set_lyric_source(source.clone());
                         nih_log!("Set lyric source to {:?}", source);
                     }
                 }
@@ -496,12 +506,20 @@ impl Plutau {
                         nih_log!("playing note: {}", note);
 
                         // update lyric if not using sysex
-                        self.params.lyric_settings.lock().unwrap().lyric_param.current = Phoneme::new(
+                        self.params
+                            .lyric_settings
+                            .lock()
+                            .unwrap()
+                            .lyric_param
+                            .current = Phoneme::new(
                             self.params.vowel.value() as u8,
                             self.params.consonant.value() as u8,
                         );
-                        
-                        nih_log!("source: {:?}", self.params.lyric_settings.lock().unwrap().lyric_source);
+
+                        nih_log!(
+                            "source: {:?}",
+                            self.params.lyric_settings.lock().unwrap().lyric_source
+                        );
 
                         self.lyric = self.params.lyric_settings.lock().unwrap().get_jpn_utf8();
 
@@ -594,7 +612,15 @@ impl Plutau {
                                 std::path::MAIN_SEPARATOR_STR,
                                 self.lyric
                             );
-                            nih_log!("Received lyric: {}", self.params.lyric_settings.lock().unwrap().lyric_sysex.get_jpn_utf8());
+                            nih_log!(
+                                "Received lyric: {}",
+                                self.params
+                                    .lyric_settings
+                                    .lock()
+                                    .unwrap()
+                                    .lyric_sysex
+                                    .get_jpn_utf8()
+                            );
                         } else {
                             nih_log!("Received SysEx message: {:?}", message);
                         }
