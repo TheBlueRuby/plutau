@@ -22,7 +22,7 @@ pub fn uninterleave(samples: Vec<f32>, channels: usize) -> LoadedSample {
 
     LoadedSample {
         samples: new_samples,
-        frequency: 440.0,
+        frequency: DEFAULT_FREQUENCY,
     }
 }
 
