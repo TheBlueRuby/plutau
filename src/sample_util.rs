@@ -55,7 +55,7 @@ pub fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32
         }
         Err(_) => LoadedSample {
             samples: vec![],
-            frequency: 440.0,
+            frequency: DEFAULT_FREQUENCY,
         },
     }
 }
