@@ -16,7 +16,7 @@ pub fn uninterleave(samples: Vec<f32>, channels: usize) -> LoadedSample {
     for sample_chunk in samples.chunks(channels) {
         // sample_chunk is a chunk like [a, b]
         for (i, sample) in sample_chunk.into_iter().enumerate() {
-            new_samples[i].push(sample.clone());
+            new_samples[i].push(*sample);
         }
     }
 
