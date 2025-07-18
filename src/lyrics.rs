@@ -109,7 +109,7 @@ pub trait Lyric {
         //map indexes from utf8_lut to jis_lut
         let mut jis_vec: Vec<u8> = vec![];
         for c in utf8.chars() {
-            if let Some(index) = utf8_lut.iter().position(|&x| x == c.to_string()) {
+            if let Some(index) = utf8_lut.iter().position(|&x| x.eq(&c.to_string())) {
                 if let Some(jis_bytes) = jis_lut.get(index) {
                     jis_vec.extend_from_slice(jis_bytes);
                 }
