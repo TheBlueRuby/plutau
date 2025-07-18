@@ -1,8 +1,9 @@
 use nih_plug::{nih_log, prelude::SysExMessage};
+use serde::{Deserialize, Serialize};
 
 use crate::lyrics::Lyric;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SysExLyric {
     raw: [u8; 6],
     short: bool,

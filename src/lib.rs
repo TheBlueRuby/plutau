@@ -52,6 +52,7 @@ pub enum ThreadMessage {
     LoadSinger(PathBuf),
     RemoveSinger(PathBuf),
     LoadLyric(PathBuf),
+    SetLyricSource(i32),
 }
 
 /// Main plugin struct
@@ -98,12 +99,19 @@ pub struct PlutauParams {
     pub singer_dir: Mutex<String>,
     #[persist = "oto"]
     pub oto: Mutex<Oto>,
-    #[persist = "lyric-file"]
-    pub lyric_file: Mutex<PathBuf>,
+    #[persist = "lyric-settings"]
+    pub lyric_settings: Arc<Mutex<LyricSettings>>,
 
     pub singer: Arc<Mutex<String>>,
     pub cur_sample: Arc<Mutex<String>>,
     pub lyrics: Arc<Mutex<String>>,
+
+
+    #[id = "vowel"]
+    pub vowel: IntParam,
+
+    #[id = "consonant"]
+    pub consonant: IntParam,
 
     #[id = "gain"]
     pub gain: FloatParam,
@@ -120,7 +128,7 @@ pub struct PlutauParams {
 impl Default for PlutauParams {
     fn default() -> Self {
         Self {
-            editor_state: ViziaState::new(|| (400, 700)),
+            editor_state: ViziaState::new(|| (800, 700)),
             sample_list: Mutex::new(vec![]),
             gain: FloatParam::new(
                 "Gain",
@@ -131,11 +139,13 @@ impl Default for PlutauParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             instant_cutoff: BoolParam::new("Instant Cutoff", true),
-            lyric_file: Mutex::new(PathBuf::from("")),
+            lyric_settings: Arc::new(Mutex::new(LyricSettings::new())),
             singer_dir: Mutex::new(String::from("")),
             singer: Arc::new(Mutex::new(String::from("None"))),
             cur_sample: Arc::new(Mutex::new(String::from(""))),
             lyrics: Arc::new(Mutex::new(String::from(""))),
+            vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
+            consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
             oto: Mutex::new(Oto::new(String::from(""))),
             bend_range: FloatParam::new(
                 "Bend Range",
@@ -342,8 +352,10 @@ impl Plugin for Plutau {
                                             s * (1.0 - ratio),
                                             s2 * ratio
                                         );
-                                        *sample += s * (1.0 - ratio) + s2 * ratio * playing_sample.gain;
-                                        amplitude += (s.abs() * (1.0 - ratio)) + (s2.abs() * ratio) * playing_sample.gain;
+                                        *sample +=
+                                            s * (1.0 - ratio) + s2 * ratio * playing_sample.gain;
+                                        amplitude += (s.abs() * (1.0 - ratio))
+                                            + (s2.abs() * ratio) * playing_sample.gain;
                                     } else {
                                         *sample += s;
                                         amplitude += s.abs();
@@ -439,6 +451,17 @@ impl Plutau {
                     ThreadMessage::LoadLyric(path) => {
                         self.load_lyric(path.clone());
                     }
+                    ThreadMessage::SetLyricSource(source) => {
+                        // map int to enum
+                        let source = match source {
+                            0 => LyricSource::Param,
+                            1 => LyricSource::File,
+                            2 => LyricSource::SysEx,
+                            _ => LyricSource::Param,
+                        };
+                        self.params.lyric_settings.lock().unwrap().set_lyric_source(source.clone());
+                        nih_log!("Set lyric source to {:?}", source);
+                    }
                 }
             }
         }
@@ -467,6 +490,13 @@ impl Plutau {
                         }
                         nih_log!("playing note: {}", note);
 
+                        // update lyric if not using sysex
+                        self.lyric.lyric_param.current = Phoneme::new(
+                            self.params.vowel.value() as u8,
+                            self.params.consonant.value() as u8,
+                        );
+                        
+                        // phoneme will be the path to the phoneme wav file
                         let phoneme = format!(
                             "{}{}{}.wav",
                             self.params.singer_dir.lock().unwrap().clone(),
@@ -692,7 +722,7 @@ impl Plutau {
     fn load_lyric(&mut self, path: PathBuf) {
         if let Ok(contents) = fs::read_to_string(&path) {
             *self.params.lyrics.lock().unwrap() = contents;
-            *self.params.lyric_file.lock().unwrap() = path;
+            self.params.lyric_settings.lock().unwrap().lyric_file = FileLyric::new(path);
         }
     }
 }
@@ -712,10 +742,8 @@ impl ClapPlugin for Plutau {
 
 impl Vst3Plugin for Plutau {
     const VST3_CLASS_ID: [u8; 16] = *b"Avi86UtauPlugin1";
-    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
-        Vst3SubCategory::Generator,
-        Vst3SubCategory::Instrument,
-    ];
+    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
+        &[Vst3SubCategory::Generator, Vst3SubCategory::Instrument];
 }
 
 nih_export_clap!(Plutau);

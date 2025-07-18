@@ -1,5 +1,7 @@
-#[derive(Debug, Clone, Copy)]
+use serde::{Deserialize, Serialize};
 
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Phoneme {
     pub vowel: u8, // a,i,u,e,o
 

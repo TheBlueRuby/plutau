@@ -1,5 +1,7 @@
 use std::{fs::File, path::PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{phoneme::Phoneme, sysex::SysExLyric};
 
 pub trait Lyric {
@@ -121,13 +123,14 @@ pub trait Lyric {
     fn get_latin(&mut self) -> String;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum LyricSource {
     Param,
     File,
     SysEx,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LyricSettings {
     pub lyric_source: LyricSource,
     pub lyric_file: FileLyric,
@@ -170,7 +173,7 @@ impl LyricSettings {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FileLyric {
     pub path: PathBuf,
     pub lyric_vec: Vec<String>,
@@ -211,7 +214,7 @@ impl FileLyric {
 
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ParamLyric {
     pub current: Phoneme,
 }
