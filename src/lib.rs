@@ -2,7 +2,6 @@ use crate::playing_sample::PlayingSample;
 use editor_vizia::visualizer::VisualizerData;
 use nih_plug_vizia::ViziaState;
 use playing_sample::PlayingState;
-use rubato::Resampler;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -17,14 +16,23 @@ use nih_plug::prelude::*;
 mod editor_vizia;
 mod playing_sample;
 
+mod sample_util;
+use sample_util::*;
+
 mod frq_parse;
 use frq_parse::*;
 
 mod oto;
 use oto::*;
 
+mod lyrics;
+use lyrics::*;
+
 mod sysex;
 use sysex::*;
+
+mod phoneme;
+use phoneme::*;
 
 mod midi;
 use midi::*;
@@ -43,6 +51,8 @@ pub struct LoadedSample {
 pub enum ThreadMessage {
     LoadSinger(PathBuf),
     RemoveSinger(PathBuf),
+    LoadLyric(PathBuf),
+    SetLyricSource(i32),
 }
 
 /// Main plugin struct
@@ -53,11 +63,11 @@ pub struct Plutau {
     pub loaded_samples: HashMap<PathBuf, LoadedSample>,
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
-    pub lyric: SysExLyric,
     pub sample_frequency: f32,
     pub midi_frequency: f32,
     pub pitch_bend: f32,
     pub note: u8,
+    pub lyric: String,
 }
 
 impl Default for Plutau {
@@ -69,11 +79,11 @@ impl Default for Plutau {
             consumer: RefCell::new(None),
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
-            lyric: SysExLyric::from_buffer([0xF0, 0x30, 0x42, 0xF7].as_ref()).unwrap(),
             sample_frequency: 440.0,
             midi_frequency: 440.0,
             pitch_bend: 0.0,
             note: 0,
+            lyric: String::new(),
         }
     }
 }
@@ -89,8 +99,18 @@ pub struct PlutauParams {
     pub singer_dir: Mutex<String>,
     #[persist = "oto"]
     pub oto: Mutex<Oto>,
+    #[persist = "lyric-settings"]
+    pub lyric_settings: Arc<Mutex<LyricSettings>>,
+
     pub singer: Arc<Mutex<String>>,
     pub cur_sample: Arc<Mutex<String>>,
+    pub lyrics: Arc<Mutex<String>>,
+
+    #[id = "vowel"]
+    pub vowel: IntParam,
+
+    #[id = "consonant"]
+    pub consonant: IntParam,
 
     #[id = "gain"]
     pub gain: FloatParam,
@@ -107,20 +127,24 @@ pub struct PlutauParams {
 impl Default for PlutauParams {
     fn default() -> Self {
         Self {
-            editor_state: ViziaState::new(|| (400, 700)),
+            editor_state: ViziaState::new(|| (800, 700)),
             sample_list: Mutex::new(vec![]),
             gain: FloatParam::new(
                 "Gain",
                 util::db_to_gain(0.0),
-                FloatRange::Linear { min: 0.0, max: 2.0 },
+                FloatRange::Linear { min: 0.0, max: 4.0 },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             instant_cutoff: BoolParam::new("Instant Cutoff", true),
+            lyric_settings: Arc::new(Mutex::new(LyricSettings::new())),
             singer_dir: Mutex::new(String::from("")),
             singer: Arc::new(Mutex::new(String::from("None"))),
             cur_sample: Arc::new(Mutex::new(String::from(""))),
+            lyrics: Arc::new(Mutex::new(String::from(""))),
+            vowel: IntParam::new("Vowel", 0, IntRange::Linear { min: 0, max: 4 }),
+            consonant: IntParam::new("Consonant", 0, IntRange::Linear { min: 0, max: 14 }),
             oto: Mutex::new(Oto::new(String::from(""))),
             bend_range: FloatParam::new(
                 "Bend Range",
@@ -174,6 +198,7 @@ impl Plugin for Plutau {
             self.params.clone(),
             self.params.singer.clone(),
             self.params.cur_sample.clone(),
+            self.params.lyrics.clone(),
             self.params.editor_state.clone(),
             Arc::new(Mutex::new(producer)),
             Arc::clone(&self.visualizer),
@@ -204,10 +229,22 @@ impl Plugin for Plutau {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
+        // Clear buffers to prevent buzzing sound on DAWs which don't clear them
+        for buf in buffer.as_slice().iter_mut() {
+            for s in buf.iter_mut() {
+                *s = 0.0;
+            }
+        }
+
         self.process_messages();
         self.process_midi(context, buffer);
 
         let mut amplitude = 0.0;
+
+        if !context.transport().playing {
+            // reset lyric index, may cause desyncs if not playing from start of song
+            self.params.lyric_settings.lock().unwrap().lyric_file.index = 0;
+        }
 
         for playing_sample in &mut self.playing_samples {
             // attempt to get sample data
@@ -326,8 +363,10 @@ impl Plugin for Plutau {
                                             s * (1.0 - ratio),
                                             s2 * ratio
                                         );
-                                        *sample += s * (1.0 - ratio) + s2 * ratio * playing_sample.gain;
-                                        amplitude += (s.abs() * (1.0 - ratio)) + (s2.abs() * ratio) * playing_sample.gain;
+                                        *sample +=
+                                            s * (1.0 - ratio) + s2 * ratio * playing_sample.gain;
+                                        amplitude += (s.abs() * (1.0 - ratio))
+                                            + (s2.abs() * ratio) * playing_sample.gain;
                                     } else {
                                         *sample += s;
                                         amplitude += s.abs();
@@ -401,65 +440,6 @@ impl Plugin for Plutau {
     }
 }
 
-fn uninterleave(samples: Vec<f32>, channels: usize) -> LoadedSample {
-    // input looks like:
-    // [a, b, a, b, a, b, ...]
-    //
-    // output should be:
-    // [
-    //    [a, a, a, ...],
-    //    [b, b, b, ...]
-    // ]
-
-    let mut new_samples = vec![Vec::with_capacity(samples.len() / channels); channels];
-
-    for sample_chunk in samples.chunks(channels) {
-        // sample_chunk is a chunk like [a, b]
-        for (i, sample) in sample_chunk.into_iter().enumerate() {
-            new_samples[i].push(sample.clone());
-        }
-    }
-
-    LoadedSample {
-        samples: new_samples,
-        frequency: 440.0,
-    }
-}
-
-fn resample(samples: LoadedSample, sample_rate_in: f32, sample_rate_out: f32) -> LoadedSample {
-    let sample_data = samples.samples;
-    let mut resampler = rubato::FftFixedIn::<f32>::new(
-        sample_rate_in as usize,
-        sample_rate_out as usize,
-        sample_data[0].len(),
-        8,
-        sample_data.len(),
-    )
-    .unwrap();
-
-    match resampler.process(&sample_data, None) {
-        Ok(mut waves_out) => {
-            // get the duration of leading silence introduced by FFT
-            // https://github.com/HEnquist/rubato/blob/52cdc3eb8e2716f40bc9b444839bca067c310592/src/synchro.rs#L654
-            let silence_len = resampler.output_delay();
-
-            for channel in waves_out.iter_mut() {
-                channel.drain(..silence_len);
-                channel.shrink_to_fit();
-            }
-
-            LoadedSample {
-                samples: waves_out,
-                frequency: samples.frequency,
-            }
-        }
-        Err(_) => LoadedSample {
-            samples: vec![],
-            frequency: 440.0,
-        },
-    }
-}
-
 impl Plutau {
     fn velocity_to_gain(&self, velocity: u8) -> f32 {
         let max_vol = self.params.gain.value();
@@ -478,6 +458,24 @@ impl Plutau {
                     }
                     ThreadMessage::RemoveSinger(path) => {
                         self.remove_singer(path.clone());
+                    }
+                    ThreadMessage::LoadLyric(path) => {
+                        self.load_lyric(path.clone());
+                    }
+                    ThreadMessage::SetLyricSource(source) => {
+                        // map int to enum
+                        let source = match source {
+                            0 => LyricSource::Param,
+                            1 => LyricSource::File,
+                            2 => LyricSource::SysEx,
+                            _ => LyricSource::Param,
+                        };
+                        self.params
+                            .lyric_settings
+                            .lock()
+                            .unwrap()
+                            .set_lyric_source(source.clone());
+                        nih_log!("Set lyric source to {:?}", source);
                     }
                 }
             }
@@ -507,13 +505,33 @@ impl Plutau {
                         }
                         nih_log!("playing note: {}", note);
 
+                        // update lyric if not using sysex
+                        self.params
+                            .lyric_settings
+                            .lock()
+                            .unwrap()
+                            .lyric_param
+                            .current = Phoneme::new(
+                            self.params.vowel.value() as u8,
+                            self.params.consonant.value() as u8,
+                        );
+
+                        nih_log!(
+                            "source: {:?}",
+                            self.params.lyric_settings.lock().unwrap().lyric_source
+                        );
+
+                        self.lyric = self.params.lyric_settings.lock().unwrap().get_jpn_utf8();
+
+                        // phoneme will be the path to the phoneme wav file
                         let phoneme = format!(
                             "{}{}{}.wav",
                             self.params.singer_dir.lock().unwrap().clone(),
                             std::path::MAIN_SEPARATOR_STR,
-                            self.lyric.get_jpn_utf8()
+                            self.lyric.clone()
                         );
                         nih_log!("playing phoneme: {}", phoneme);
+                        *self.params.cur_sample.lock().unwrap() = phoneme.clone();
                         // None if no samples are loaded
                         if let Some((path, sample_data)) =
                             self.loaded_samples.get_key_value(Path::new(&phoneme))
@@ -524,7 +542,7 @@ impl Plutau {
                                 .oto
                                 .lock()
                                 .unwrap()
-                                .get_entry(self.lyric.get_jpn_utf8() + ".wav")
+                                .get_entry(self.lyric.clone() + ".wav")
                                 .unwrap()
                                 .offset as f32
                                 / 1000.0)
@@ -543,7 +561,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
+                                    .get_entry(self.lyric.clone() + ".wav")
                                     .unwrap()
                                     .consonant as f32
                                     / 1000.0)
@@ -555,7 +573,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
+                                    .get_entry(self.lyric.clone() + ".wav")
                                     .unwrap()
                                     .cutoff as f32
                                     / 1000.0)
@@ -587,14 +605,22 @@ impl Plutau {
                         ..
                     } => {
                         if message.is_lyric() {
-                            self.lyric = message;
+                            self.params.lyric_settings.lock().unwrap().lyric_sysex = message;
                             *self.params.cur_sample.lock().unwrap() = format!(
                                 "{}{}{}.wav",
                                 self.params.singer_dir.lock().unwrap().clone(),
                                 std::path::MAIN_SEPARATOR_STR,
-                                self.lyric.get_jpn_utf8()
+                                self.lyric
                             );
-                            nih_log!("Received lyric: {}", self.lyric.get_jpn_utf8());
+                            nih_log!(
+                                "Received lyric: {}",
+                                self.params
+                                    .lyric_settings
+                                    .lock()
+                                    .unwrap()
+                                    .lyric_sysex
+                                    .get_jpn_utf8()
+                            );
                         } else {
                             nih_log!("Received SysEx message: {:?}", message);
                         }
@@ -728,6 +754,13 @@ impl Plutau {
         *self.params.oto.lock().unwrap() = Oto::new(String::from(""));
         *self.params.singer.lock().unwrap() = String::from("None");
     }
+
+    fn load_lyric(&mut self, path: PathBuf) {
+        if let Ok(contents) = fs::read_to_string(&path) {
+            *self.params.lyrics.lock().unwrap() = contents;
+            self.params.lyric_settings.lock().unwrap().lyric_file = FileLyric::new(path);
+        }
+    }
 }
 
 impl ClapPlugin for Plutau {
@@ -745,11 +778,8 @@ impl ClapPlugin for Plutau {
 
 impl Vst3Plugin for Plutau {
     const VST3_CLASS_ID: [u8; 16] = *b"Avi86UtauPlugin1";
-    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
-        Vst3SubCategory::Generator,
-        Vst3SubCategory::Sampler,
-        Vst3SubCategory::Instrument,
-    ];
+    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
+        &[Vst3SubCategory::Generator, Vst3SubCategory::Instrument];
 }
 
 nih_export_clap!(Plutau);

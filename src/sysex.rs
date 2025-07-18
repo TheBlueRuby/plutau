@@ -1,6 +1,9 @@
 use nih_plug::{nih_log, prelude::SysExMessage};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+use crate::lyrics::Lyric;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SysExLyric {
     raw: [u8; 6],
     short: bool,
@@ -17,8 +20,18 @@ impl SysExMessage for SysExLyric {
             processed_sysex = [buffer[0], buffer[1], buffer[2], buffer[3], 0x00, buffer[3]];
             four_byte = true;
         } else {
-            processed_sysex = buffer.try_into().unwrap();
+            processed_sysex = match buffer.try_into() {
+                Ok(arr) => arr,
+                Err(_) => {
+                    nih_log!("Buffer conversion failed, using [0; 6]: {:x?}", buffer);
+                    [0u8; 6]
+                }
+            };
             four_byte = false;
+        }
+        if !Self::is_valid(&processed_sysex) {
+            nih_log!("Invalid SysEx lyric: {:x?}", processed_sysex);
+            return None;
         }
         Option::Some(Self {
             raw: processed_sysex,
@@ -31,27 +44,39 @@ impl SysExMessage for SysExLyric {
     }
 }
 
+impl Default for SysExLyric {
+    fn default() -> Self {
+        SysExLyric::from_buffer([0xF0, 0x30, 0x42, 0xF7].as_ref()).unwrap()
+    }
+}
+
 impl SysExLyric {
     pub fn is_lyric(&self) -> bool {
         nih_log!("Lyric: {:x?}, {}", self.raw, self.raw.len());
-        if self.raw.len() != 6 {
+        Self::is_valid(&self.raw)
+    }
+    pub fn is_valid(raw: &[u8]) -> bool {
+        if raw.len() != 6 {
             return false;
         }
-        if self.raw[0] == 0xff && self.raw.last().unwrap_or(&0u8).clone() == 0x05 {
-            nih_log!("Lyric using lyric event: {:x?}", self.raw);
+        if raw[0] == 0xff && raw.last().unwrap_or(&0u8).clone() == 0x05 {
+            nih_log!("Lyric using lyric event: {:x?}", raw);
             return true;
         }
-        if self.raw[0] == 0xff && self.raw.last().unwrap_or(&0u8).clone() == 0x01 {
-            nih_log!("Lyric using text event: {:x?}", self.raw);
+        if raw[0] == 0xff && raw.last().unwrap_or(&0u8).clone() == 0x01 {
+            nih_log!("Lyric using text event: {:x?}", raw);
             return true;
         }
-        if self.raw[0] == 0xf0 && self.raw.last().unwrap_or(&0u8).clone() == 0xf7 {
-            nih_log!("Lyric using SysEx event: {:x?}", self.raw);
+        if raw[0] == 0xf0 && raw.last().unwrap_or(&0u8).clone() == 0xf7 {
+            nih_log!("Lyric using SysEx event: {:x?}", raw);
             return true;
         }
         false
     }
-    pub fn get_jpn_utf8(&self) -> String {
+}
+
+impl Lyric for SysExLyric {
+    fn get_jpn_utf8(&mut self) -> String {
         let lyric: [u8; 4];
         if self.short {
             lyric = [self.raw[1], self.raw[2], 0, 0];
@@ -67,7 +92,7 @@ impl SysExLyric {
         }
         String::from_utf16_lossy(&lyric_16).trim().to_string()
     }
-    pub fn get_latin(&self) -> String {
+    fn get_latin(&mut self) -> String {
         //TODO: implement conversion from jpn_utf8 to latin
         "".to_string()
     }

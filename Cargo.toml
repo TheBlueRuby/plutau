@@ -12,10 +12,9 @@ crate-type = ["cdylib", "lib"]
 hound = "3.5.0"
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["standalone"] }
 nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
-iced_baseview = { git = "https://github.com/BillyDM/iced_baseview.git" }
-rfd = "0.15.2"
-serde = "1.0.218"
-time = "0.3.35"
+rfd = "0.15"
+serde = "1.0"
+time = "0.3"
 rubato = { git = "https://github.com/HEnquist/rubato.git", branch = "next-0.13" }
 rtrb = "0.3.2"
 tdpsola = "0.1.0"
