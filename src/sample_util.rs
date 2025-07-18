@@ -1,7 +1,7 @@
 use crate::LoadedSample;
 use rubato::Resampler;
 
-let DEFAULT_FREQUENCY = 440.0; //middle c
+const DEFAULT_FREQUENCY: f32 = 440.0; //middle c
 
 pub fn uninterleave(samples: Vec<f32>, channels: usize) -> LoadedSample {
     // input looks like:
