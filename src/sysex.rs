@@ -1,5 +1,7 @@
 use nih_plug::{nih_log, prelude::SysExMessage};
 
+use crate::lyrics::Lyric;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct SysExLyric {
     raw: [u8; 6],
@@ -31,6 +33,12 @@ impl SysExMessage for SysExLyric {
     }
 }
 
+impl Default for SysExLyric {
+    fn default() -> Self {
+        SysExLyric::from_buffer([0xF0, 0x30, 0x42, 0xF7].as_ref()).unwrap()
+    }
+}
+
 impl SysExLyric {
     pub fn is_lyric(&self) -> bool {
         nih_log!("Lyric: {:x?}, {}", self.raw, self.raw.len());
@@ -51,7 +59,10 @@ impl SysExLyric {
         }
         false
     }
-    pub fn get_jpn_utf8(&self) -> String {
+}
+
+impl Lyric for SysExLyric {
+    fn get_jpn_utf8(&mut self) -> String {
         let lyric: [u8; 4];
         if self.short {
             lyric = [self.raw[1], self.raw[2], 0, 0];
@@ -67,7 +78,7 @@ impl SysExLyric {
         }
         String::from_utf16_lossy(&lyric_16).trim().to_string()
     }
-    pub fn get_latin(&self) -> String {
+    fn get_latin(&mut self) -> String {
         //TODO: implement conversion from jpn_utf8 to latin
         "".to_string()
     }

@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+use std::{fs::File, path::PathBuf};
 
 use crate::{phoneme::Phoneme, sysex::SysExLyric};
 
-trait Lyric {
-    fn get_jpn_utf8(&self) -> String;
-    fn get_jpn_jis(&self) -> Vec<u8> {
+pub trait Lyric {
+    fn get_jpn_utf8(&mut self) -> String;
+    fn get_jpn_jis(&mut self) -> Vec<u8> {
         let utf8_lut: Vec<&str> = vec![
             "あ", "い", "う", "え", "お", "か", "き", "く", "け", "こ", "さ", "し", "す", "せ",
             "そ", "た", "ち", "つ", "て", "と", "な", "に", "ぬ", "ね", "の", "は", "ひ", "ふ",
@@ -118,9 +118,10 @@ trait Lyric {
         }
         jis_vec
     }
-    fn get_latin(&self) -> String;
+    fn get_latin(&mut self) -> String;
 }
 
+#[derive(Clone)]
 pub enum LyricSource {
     Param,
     File,
@@ -129,17 +130,100 @@ pub enum LyricSource {
 
 pub struct LyricSettings {
     pub lyric_source: LyricSource,
-    pub lyric_file: Option<FileLyric>,
-    pub lyric_sysex: Option<SysExLyric>,
-    pub lyric_param: Option<ParamLyric>,
+    pub lyric_file: FileLyric,
+    pub lyric_sysex: SysExLyric,
+    pub lyric_param: ParamLyric,
+    pub cur_lyric: Option<Box<dyn Lyric>>,
 }
 
+impl Lyric for LyricSettings {
+    fn get_jpn_utf8(&mut self) -> String {
+        self.cur_lyric.as_mut().unwrap().get_jpn_utf8()
+    }
+
+    fn get_latin(&mut self) -> String {
+        self.cur_lyric.as_mut().unwrap().get_latin()
+    }
+}
+
+impl LyricSettings {
+    pub fn new() -> Self {
+        let mut settings = Self {
+            lyric_source: LyricSource::Param,
+            lyric_file: FileLyric::new(PathBuf::from("")),
+            lyric_sysex: SysExLyric::default(),
+            lyric_param: ParamLyric {
+                current: Phoneme::default(),
+            },
+            cur_lyric: None,
+        };
+        settings.set_lyric_source(settings.lyric_source.clone());
+        settings
+    }
+
+    pub fn set_lyric_source(&mut self, source: LyricSource) {
+        self.lyric_source = source;
+        self.cur_lyric = match self.lyric_source {
+            LyricSource::Param => Some(Box::new(self.lyric_param.clone())),
+            LyricSource::File => Some(Box::new(self.lyric_file.clone())),
+            LyricSource::SysEx => Some(Box::new(self.lyric_sysex.clone())),
+        };
+    }
+}
+
+#[derive(Clone)]
 pub struct FileLyric {
     pub path: PathBuf,
     pub lyric_vec: Vec<String>,
     pub index: usize,
 }
 
+impl Lyric for FileLyric {
+    fn get_jpn_utf8(&mut self) -> String {
+        if self.index < self.lyric_vec.len() {
+            let lyric = self.lyric_vec[self.index].clone();
+            self.index += 1; // Increment index for next call
+            lyric
+        } else {
+            String::new()
+        }
+    }
+
+    fn get_latin(&mut self) -> String {
+        //TODO: translation from jpn to romaji
+        // For now, just return the same as jpn_utf8
+        self.get_jpn_utf8()
+    }
+}
+
+impl FileLyric {
+    pub fn new(path: PathBuf) -> Self {
+        let lyric_vec = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .lines()
+            .map(|line| line.to_string())
+            .collect();
+        Self {
+            path,
+            lyric_vec,
+            index: 0,
+        }
+    }
+
+}
+
+#[derive(Clone)]
 pub struct ParamLyric {
     pub current: Phoneme,
 }
+
+impl Lyric for ParamLyric {
+    fn get_jpn_utf8(&mut self) -> String {
+        self.current.get_jpn_utf8()
+    }
+
+    fn get_latin(&mut self) -> String {
+        self.current.get_chars()
+    }
+}
+

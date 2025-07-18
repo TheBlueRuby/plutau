@@ -148,3 +148,12 @@ impl Phoneme {
         characters[self.consonant as usize][self.vowel as usize].to_vec()
     }
 }
+
+impl Default for Phoneme {
+    fn default() -> Self {
+        Self {
+            vowel: 0,       // 'a'
+            consonant: 0,   // none
+        }
+    }
+}
