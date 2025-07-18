@@ -25,8 +25,14 @@ use frq_parse::*;
 mod oto;
 use oto::*;
 
+mod lyrics;
+use lyrics::*;
+
 mod sysex;
 use sysex::*;
+
+mod phoneme;
+use phoneme::*;
 
 mod midi;
 use midi::*;
@@ -119,7 +125,7 @@ impl Default for PlutauParams {
             gain: FloatParam::new(
                 "Gain",
                 util::db_to_gain(0.0),
-                FloatRange::Linear { min: 0.0, max: 2.0 },
+                FloatRange::Linear { min: 0.0, max: 4.0 },
             )
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
