@@ -133,41 +133,40 @@ pub struct LyricSettings {
     pub lyric_file: FileLyric,
     pub lyric_sysex: SysExLyric,
     pub lyric_param: ParamLyric,
-    pub cur_lyric: Option<Box<dyn Lyric>>,
 }
 
 impl Lyric for LyricSettings {
     fn get_jpn_utf8(&mut self) -> String {
-        self.cur_lyric.as_mut().unwrap().get_jpn_utf8()
+        match self.lyric_source {
+            LyricSource::Param => self.lyric_param.get_jpn_utf8(),
+            LyricSource::File => self.lyric_file.get_jpn_utf8(),
+            LyricSource::SysEx => self.lyric_sysex.get_jpn_utf8(),
+        }
     }
 
     fn get_latin(&mut self) -> String {
-        self.cur_lyric.as_mut().unwrap().get_latin()
+        match self.lyric_source {
+            LyricSource::Param => self.lyric_param.get_latin(),
+            LyricSource::File => self.lyric_file.get_latin(),
+            LyricSource::SysEx => self.lyric_sysex.get_latin(),
+        }
     }
 }
 
 impl LyricSettings {
     pub fn new() -> Self {
-        let mut settings = Self {
+        Self {
             lyric_source: LyricSource::Param,
             lyric_file: FileLyric::new(PathBuf::from("")),
             lyric_sysex: SysExLyric::default(),
             lyric_param: ParamLyric {
                 current: Phoneme::default(),
             },
-            cur_lyric: None,
-        };
-        settings.set_lyric_source(settings.lyric_source.clone());
-        settings
+        }
     }
 
     pub fn set_lyric_source(&mut self, source: LyricSource) {
         self.lyric_source = source;
-        self.cur_lyric = match self.lyric_source {
-            LyricSource::Param => Some(Box::new(self.lyric_param.clone())),
-            LyricSource::File => Some(Box::new(self.lyric_file.clone())),
-            LyricSource::SysEx => Some(Box::new(self.lyric_sysex.clone())),
-        };
     }
 }
 

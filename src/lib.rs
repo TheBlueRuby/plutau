@@ -62,7 +62,7 @@ pub struct Plutau {
     pub loaded_samples: HashMap<PathBuf, LoadedSample>,
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
-    pub lyric: SysExLyric,
+    pub lyric: LyricSettings,
     pub sample_frequency: f32,
     pub midi_frequency: f32,
     pub pitch_bend: f32,
@@ -78,7 +78,7 @@ impl Default for Plutau {
             consumer: RefCell::new(None),
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
-            lyric: SysExLyric::from_buffer([0xF0, 0x30, 0x42, 0xF7].as_ref()).unwrap(),
+            lyric: LyricSettings::new(),
             sample_frequency: 440.0,
             midi_frequency: 440.0,
             pitch_bend: 0.0,
@@ -547,7 +547,7 @@ impl Plutau {
                         ..
                     } => {
                         if message.is_lyric() {
-                            self.lyric = message;
+                            self.lyric.lyric_sysex = message;
                             *self.params.cur_sample.lock().unwrap() = format!(
                                 "{}{}{}.wav",
                                 self.params.singer_dir.lock().unwrap().clone(),
