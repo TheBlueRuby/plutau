@@ -20,6 +20,9 @@ impl SysExMessage for SysExLyric {
             processed_sysex = [buffer[0], buffer[1], buffer[2], buffer[3], 0x00, buffer[3]];
             four_byte = true;
         } else {
+            if let Err(_) = buffer.try_into() {
+                nih_log!("Buffer conversion failed, falling back to default value: {:x?}", buffer);
+            }
             processed_sysex = buffer.try_into().unwrap_or([0x00; 6]);
             four_byte = false;
         }
