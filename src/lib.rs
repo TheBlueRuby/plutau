@@ -229,7 +229,7 @@ impl Plugin for Plutau {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        // clear buffers to prevent buzzing sound on daws which dont
+        // Clear buffers to prevent buzzing sound on DAWs which don't clear them
         for buf in buffer.as_slice().iter_mut() {
             for s in buf.iter_mut() {
                 *s = 0.0;
