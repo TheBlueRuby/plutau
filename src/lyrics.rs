@@ -140,6 +140,7 @@ pub struct LyricSettings {
 
 impl Lyric for LyricSettings {
     fn get_jpn_utf8(&mut self) -> String {
+        println!("Getting JPN UTF-8 lyric from source: {:?}", self.lyric_source);
         match self.lyric_source {
             LyricSource::Param => self.lyric_param.get_jpn_utf8(),
             LyricSource::File => self.lyric_file.get_jpn_utf8(),

@@ -63,7 +63,6 @@ pub struct Plutau {
     pub loaded_samples: HashMap<PathBuf, LoadedSample>,
     pub consumer: RefCell<Option<rtrb::Consumer<ThreadMessage>>>,
     pub visualizer: Arc<VisualizerData>,
-    pub lyric: LyricSettings,
     pub sample_frequency: f32,
     pub midi_frequency: f32,
     pub pitch_bend: f32,
@@ -79,7 +78,6 @@ impl Default for Plutau {
             consumer: RefCell::new(None),
             sample_rate: 44100.0,
             visualizer: Arc::new(VisualizerData::new()),
-            lyric: LyricSettings::new(),
             sample_frequency: 440.0,
             midi_frequency: 440.0,
             pitch_bend: 0.0,
@@ -491,19 +489,21 @@ impl Plutau {
                         nih_log!("playing note: {}", note);
 
                         // update lyric if not using sysex
-                        self.lyric.lyric_param.current = Phoneme::new(
+                        self.params.lyric_settings.lock().unwrap().lyric_param.current = Phoneme::new(
                             self.params.vowel.value() as u8,
                             self.params.consonant.value() as u8,
                         );
                         
+                        nih_log!("source: {:?}", self.params.lyric_settings.lock().unwrap().lyric_source);
                         // phoneme will be the path to the phoneme wav file
                         let phoneme = format!(
                             "{}{}{}.wav",
                             self.params.singer_dir.lock().unwrap().clone(),
                             std::path::MAIN_SEPARATOR_STR,
-                            self.lyric.get_jpn_utf8()
+                            self.params.lyric_settings.lock().unwrap().get_jpn_utf8()
                         );
                         nih_log!("playing phoneme: {}", phoneme);
+                        *self.params.cur_sample.lock().unwrap() = phoneme.clone();
                         // None if no samples are loaded
                         if let Some((path, sample_data)) =
                             self.loaded_samples.get_key_value(Path::new(&phoneme))
@@ -514,7 +514,7 @@ impl Plutau {
                                 .oto
                                 .lock()
                                 .unwrap()
-                                .get_entry(self.lyric.get_jpn_utf8() + ".wav")
+                                .get_entry(self.params.lyric_settings.lock().unwrap().get_jpn_utf8() + ".wav")
                                 .unwrap()
                                 .offset as f32
                                 / 1000.0)
@@ -533,7 +533,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
+                                    .get_entry(self.params.lyric_settings.lock().unwrap().get_jpn_utf8() + ".wav")
                                     .unwrap()
                                     .consonant as f32
                                     / 1000.0)
@@ -545,7 +545,7 @@ impl Plutau {
                                     .oto
                                     .lock()
                                     .unwrap()
-                                    .get_entry(self.lyric.get_jpn_utf8() + ".wav")
+                                    .get_entry(self.params.lyric_settings.lock().unwrap().get_jpn_utf8() + ".wav")
                                     .unwrap()
                                     .cutoff as f32
                                     / 1000.0)
@@ -577,14 +577,14 @@ impl Plutau {
                         ..
                     } => {
                         if message.is_lyric() {
-                            self.lyric.lyric_sysex = message;
+                            self.params.lyric_settings.lock().unwrap().lyric_sysex = message;
                             *self.params.cur_sample.lock().unwrap() = format!(
                                 "{}{}{}.wav",
                                 self.params.singer_dir.lock().unwrap().clone(),
                                 std::path::MAIN_SEPARATOR_STR,
-                                self.lyric.get_jpn_utf8()
+                                self.params.lyric_settings.lock().unwrap().get_jpn_utf8()
                             );
-                            nih_log!("Received lyric: {}", self.lyric.get_jpn_utf8());
+                            nih_log!("Received lyric: {}", self.params.lyric_settings.lock().unwrap().lyric_sysex.get_jpn_utf8());
                         } else {
                             nih_log!("Received SysEx message: {:?}", message);
                         }
