@@ -20,8 +20,12 @@ impl SysExMessage for SysExLyric {
             processed_sysex = [buffer[0], buffer[1], buffer[2], buffer[3], 0x00, buffer[3]];
             four_byte = true;
         } else {
-            processed_sysex = buffer.try_into().unwrap();
+            processed_sysex = buffer.try_into().unwrap_or([0x00; 6]);
             four_byte = false;
+        }
+        if !Self::is_valid(&processed_sysex) {
+            nih_log!("Invalid SysEx lyric: {:x?}", processed_sysex);
+            return None;
         }
         Option::Some(Self {
             raw: processed_sysex,
@@ -43,19 +47,22 @@ impl Default for SysExLyric {
 impl SysExLyric {
     pub fn is_lyric(&self) -> bool {
         nih_log!("Lyric: {:x?}, {}", self.raw, self.raw.len());
-        if self.raw.len() != 6 {
+        Self::is_valid(&self.raw)
+    }
+    pub fn is_valid(raw: &[u8]) -> bool {
+        if raw.len() != 6 {
             return false;
         }
-        if self.raw[0] == 0xff && self.raw.last().unwrap_or(&0u8).clone() == 0x05 {
-            nih_log!("Lyric using lyric event: {:x?}", self.raw);
+        if raw[0] == 0xff && raw.last().unwrap_or(&0u8).clone() == 0x05 {
+            nih_log!("Lyric using lyric event: {:x?}", raw);
             return true;
         }
-        if self.raw[0] == 0xff && self.raw.last().unwrap_or(&0u8).clone() == 0x01 {
-            nih_log!("Lyric using text event: {:x?}", self.raw);
+        if raw[0] == 0xff && raw.last().unwrap_or(&0u8).clone() == 0x01 {
+            nih_log!("Lyric using text event: {:x?}", raw);
             return true;
         }
-        if self.raw[0] == 0xf0 && self.raw.last().unwrap_or(&0u8).clone() == 0xf7 {
-            nih_log!("Lyric using SysEx event: {:x?}", self.raw);
+        if raw[0] == 0xf0 && raw.last().unwrap_or(&0u8).clone() == 0xf7 {
+            nih_log!("Lyric using SysEx event: {:x?}", raw);
             return true;
         }
         false
