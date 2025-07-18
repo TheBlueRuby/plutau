@@ -204,11 +204,16 @@ impl Lyric for FileLyric {
 
 impl FileLyric {
     pub fn new(path: PathBuf) -> Self {
-        let lyric_vec = std::fs::read_to_string(&path)
-            .unwrap_or_default()
-            .split_whitespace()
-            .map(|chunk| chunk.to_string())
-            .collect();
+        let lyric_vec = match std::fs::read_to_string(&path) {
+            Ok(content) => content
+                .split_whitespace()
+                .map(|chunk| chunk.to_string())
+                .collect(),
+            Err(err) => {
+                eprintln!("Failed to read file {}: {}", path.display(), err);
+                Vec::new()
+            }
+        };
         Self {
             path,
             lyric_vec,
